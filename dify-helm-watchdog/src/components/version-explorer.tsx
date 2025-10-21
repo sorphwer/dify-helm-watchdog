@@ -1,9 +1,63 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, CalendarClock, Info, Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowUpRight,
+  CalendarClock,
+  Diff,
+  Info,
+  Loader2,
+  RefreshCw,
+  X,
+} from "lucide-react";
+import ReactDiffViewer from "react-diff-viewer";
+import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
 import type { CachePayload, StoredVersion } from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
+
+const diffViewerStyles: ReactDiffViewerStylesOverride = {
+  variables: {
+    dark: {
+      diffViewerBackground: "transparent",
+      diffViewerColor: "rgba(235,235,245,0.85)",
+      addedBackground: "rgba(34,197,94,0.18)",
+      addedColor: "rgba(74,222,128,0.95)",
+      removedBackground: "rgba(248,113,113,0.2)",
+      removedColor: "rgba(252,165,165,0.95)",
+      wordAddedBackground: "rgba(34,197,94,0.35)",
+      wordRemovedBackground: "rgba(248,113,113,0.35)",
+      gutterBackground: "rgba(15,15,15,0.7)",
+      gutterBackgroundDark: "rgba(15,15,15,0.7)",
+      highlightBackground: "rgba(59,130,246,0.2)",
+      highlightGutterBackground: "rgba(59,130,246,0.2)",
+    },
+  },
+  gutter: {
+    color: "rgba(148,163,184,0.65)",
+  },
+  diffContainer: {
+    borderRadius: "16px",
+    overflow: "hidden",
+    tableLayout: "fixed",
+  },
+  codeFold: {
+    background: "rgba(255,255,255,0.04)",
+    color: "rgba(248,250,252,0.65)",
+  },
+  titleBlock: {
+    boxSizing: "border-box",
+    maxWidth: "50%",
+    width: "50%",
+    overflowX: "auto",
+    whiteSpace: "nowrap",
+  },
+  content: {
+    boxSizing: "border-box",
+    maxWidth: "50%",
+    width: "50%",
+    overflowX: "auto",
+  },
+};
 
 interface VersionExplorerProps {
   data: CachePayload | null;
@@ -40,6 +94,22 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [reloadFlag, setReloadFlag] = useState(0);
   const [reloadTarget, setReloadTarget] = useState<string | null>(null);
   const [processedReload, setProcessedReload] = useState(0);
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
+  const [diffMeta, setDiffMeta] = useState<{
+    baseVersion: string;
+    targetVersion: string;
+  } | null>(null);
+  const [diffValuesContent, setDiffValuesContent] = useState<{
+    oldValue: string;
+    newValue: string;
+  }>({ oldValue: "", newValue: "" });
+  const [diffImagesContent, setDiffImagesContent] = useState<{
+    oldValue: string;
+    newValue: string;
+  }>({ oldValue: "", newValue: "" });
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const diffRequestRef = useRef(0);
 
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
@@ -182,9 +252,107 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     [valuesContent, imagesContent],
   );
 
+  const loadVersionArtifacts = async (version: StoredVersion) => {
+    const resolveAsset = async (asset: StoredVersion["values"]) => {
+      if (typeof asset.inline === "string") {
+        return asset.inline;
+      }
+      const response = await fetch(asset.url);
+      if (!response.ok) {
+        throw new Error("Failed to download cached YAML artifacts");
+      }
+      return response.text();
+    };
+
+    const [valuesText, imagesText] = await Promise.all([
+      resolveAsset(version.values),
+      resolveAsset(version.images),
+    ]);
+
+    return {
+      values: valuesText,
+      images: imagesText,
+    };
+  };
+
+  const openDiffModal = (targetVersionId: string) => {
+    if (!selectedVersion) {
+      return;
+    }
+
+    const baseVersionEntry = versionMap.get(selectedVersion);
+    const targetVersionEntry = versionMap.get(targetVersionId);
+
+    if (!baseVersionEntry || !targetVersionEntry) {
+      return;
+    }
+
+    const requestId = diffRequestRef.current + 1;
+    diffRequestRef.current = requestId;
+
+    setDiffModalOpen(true);
+    setDiffMeta({
+      baseVersion: baseVersionEntry.version,
+      targetVersion: targetVersionEntry.version,
+    });
+    setDiffLoading(true);
+    setDiffError(null);
+    setDiffValuesContent({ oldValue: "", newValue: "" });
+    setDiffImagesContent({ oldValue: "", newValue: "" });
+
+    void (async () => {
+      try {
+        const [baseArtifacts, targetArtifacts] = await Promise.all([
+          loadVersionArtifacts(baseVersionEntry),
+          loadVersionArtifacts(targetVersionEntry),
+        ]);
+
+        if (diffRequestRef.current !== requestId) {
+          return;
+        }
+
+        setDiffValuesContent({
+          oldValue: targetArtifacts.values,
+          newValue: baseArtifacts.values,
+        });
+        setDiffImagesContent({
+          oldValue: targetArtifacts.images,
+          newValue: baseArtifacts.images,
+        });
+      } catch (thrown) {
+        if (diffRequestRef.current !== requestId) {
+          return;
+        }
+
+        setDiffError(
+          thrown instanceof Error
+            ? thrown.message
+            : "Unexpected error while comparing cached artifacts.",
+        );
+      } finally {
+        if (diffRequestRef.current !== requestId) {
+          return;
+        }
+        setDiffLoading(false);
+      }
+    })();
+  };
+
+  const closeDiffModal = () => {
+    diffRequestRef.current += 1;
+    setDiffModalOpen(false);
+    setDiffMeta(null);
+    setDiffError(null);
+    setDiffLoading(false);
+    setDiffValuesContent({ oldValue: "", newValue: "" });
+    setDiffImagesContent({ oldValue: "", newValue: "" });
+  };
+
   const activeTab =
     artifactTabs.find((tab) => tab.id === activeArtifact) ??
     artifactTabs[0];
+  const diffActiveContent =
+    activeArtifact === "values" ? diffValuesContent : diffImagesContent;
 
   return (
     <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 overflow-hidden px-4 py-6 md:px-6 lg:px-8">
@@ -239,34 +407,85 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               <ul className="flex flex-col">
                 {versions.map((version) => {
                   const isActive = version.version === selectedVersion;
+                  const showDiffIcon = !isActive && Boolean(selectedVersion);
                   return (
                     <li key={version.version} className="mb-2 last:mb-0">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedVersion(version.version)}
-                        className={`group flex w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
-                          isActive
-                            ? "border-[#03f] bg-[#03f] text-white"
-                            : "border-white/12 bg-transparent text-muted hover:border-white/40 hover:bg-white/5 hover:text-foreground"
-                        }`}
-                      >
-                        <span className={`text-base font-semibold tracking-wide ${isActive ? "text-white" : "text-foreground"}`}>
-                          v{version.version}
-                        </span>
-                        <div className={`flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${isActive ? "text-white/90" : "text-muted"}`}>
-                          {version.appVersion && (
-                            <span className={`rounded-full border px-2 py-0.5 ${isActive ? "border-white/30 bg-white/10 text-white" : "border-white/15 bg-white/5 text-muted"}`}>
-                              App {version.appVersion}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVersion(version.version)}
+                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
+                            isActive
+                              ? "border-[#03f] bg-[#03f] text-white"
+                              : "border-white/12 bg-transparent text-muted hover:border-white/40 hover:bg-white/5 hover:text-foreground"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <span
+                              className={`text-base font-semibold tracking-wide ${
+                                isActive ? "text-white" : "text-foreground"
+                              }`}
+                            >
+                              v{version.version}
+                            </span>
+                            <span
+                              className={`text-[10px] font-mono uppercase tracking-widest ${
+                                isActive ? "text-white/90" : "text-muted"
+                              }`}
+                            >
+                              sha256:{version.values.hash.slice(0, 7)}
+                            </span>
+                          </div>
+                          <div
+                            className={`flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${
+                              isActive ? "text-white/90" : "text-muted"
+                            }`}
+                          >
+                            {version.appVersion && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 ${
+                                  isActive
+                                    ? "border-white/30 bg-white/10 text-white"
+                                    : "border-white/15 bg-white/5 text-muted"
+                                }`}
+                              >
+                                App {version.appVersion}
+                              </span>
+                            )}
+                          </div>
+                          {version.createdAt && (
+                            <span
+                              className={`mt-1 text-[10px] uppercase tracking-[0.2em] ${
+                                isActive ? "text-white/80" : "text-muted/80"
+                              }`}
+                            >
+                              {formatDate(version.createdAt)}
                             </span>
                           )}
-                          {version.createdAt && (
-                            <span>{formatDate(version.createdAt)}</span>
-                          )}
-                          <span className={`ml-auto text-[10px] font-mono tracking-widest ${isActive ? "text-white/80" : "text-muted/80"}`}>
-                            sha256:{version.values.hash.slice(0, 7)}
-                          </span>
-                        </div>
-                      </button>
+                        </button>
+                        {showDiffIcon ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openDiffModal(version.version);
+                            }}
+                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xs text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            aria-label={
+                              selectedVersion
+                                ? `Compare v${version.version} with v${selectedVersion}`
+                                : `Compare v${version.version}`
+                            }
+                            title={
+                              selectedVersion
+                                ? `Compare v${version.version} with v${selectedVersion}`
+                                : "Compare versions"
+                            }
+                          >
+                            <Diff className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   );
                 })}
@@ -332,6 +551,88 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           </div>
         </article>
       </section>
+      {diffModalOpen && diffMeta ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
+          onClick={closeDiffModal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="diff-dialog-title"
+        >
+          <div
+            className="relative flex w-full max-w-6xl flex-col gap-5 rounded-3xl border border-white/12 bg-[#080808] p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={closeDiffModal}
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/80 transition hover:border-white/40 hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              aria-label="Close comparison dialog"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <header className="flex flex-col gap-2 pr-12">
+              <span className="text-xs uppercase tracking-[0.3em] text-muted">
+                Comparing cached artifacts
+              </span>
+              <h2
+                id="diff-dialog-title"
+                className="text-2xl font-semibold text-foreground"
+              >
+                v{diffMeta.targetVersion} ↔ v{diffMeta.baseVersion}
+              </h2>
+              <p className="text-sm text-muted">
+                Review differences between releases using the same artifact tabs.
+              </p>
+            </header>
+            <div className="flex items-center justify-center gap-4">
+              <div className="flex w-full justify-center rounded-full border border-white/12 bg-black/60 p-1">
+                {artifactTabs.map((tab) => {
+                  const isActive = tab.id === activeTab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveArtifact(tab.id)}
+                      className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition ${
+                        isActive
+                          ? "border border-white bg-white text-black"
+                          : "border border-transparent text-muted hover:border-white/30 hover:text-foreground"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {diffError ? (
+              <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {diffError}
+              </div>
+            ) : null}
+            <div className="relative flex max-h-[65vh] flex-1 flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/80">
+              {diffLoading ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/75 backdrop-blur">
+                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                </div>
+              ) : null}
+              <div className="custom-scrollbar max-h-[65vh] flex-1 overflow-auto p-4">
+                <ReactDiffViewer
+                  oldValue={diffActiveContent.oldValue}
+                  newValue={diffActiveContent.newValue}
+                  splitView
+                  styles={diffViewerStyles}
+                  useDarkTheme
+                  showDiffOnly={false}
+                  leftTitle={`v${diffMeta.targetVersion}`}
+                  rightTitle={`v${diffMeta.baseVersion}`}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
