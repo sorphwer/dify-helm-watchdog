@@ -34,28 +34,34 @@ const diffViewerStyles: ReactDiffViewerStylesOverride = {
   },
   gutter: {
     color: "rgba(148,163,184,0.65)",
+    padding: "0 4px",
+    minWidth: "36px",
+    width: "36px",
+    textAlign: "right",
+  },
+  marker: {
+    padding: "0 4px",
+    width: "20px",
   },
   diffContainer: {
     borderRadius: "16px",
     overflow: "hidden",
-    tableLayout: "fixed",
-  },
-  codeFold: {
-    background: "rgba(255,255,255,0.04)",
-    color: "rgba(248,250,252,0.65)",
+    width: "100%",
   },
   titleBlock: {
-    boxSizing: "border-box",
-    maxWidth: "50%",
-    width: "50%",
-    overflowX: "auto",
-    whiteSpace: "nowrap",
+    padding: "8px 12px",
   },
   content: {
-    boxSizing: "border-box",
-    maxWidth: "50%",
-    width: "50%",
-    overflowX: "auto",
+    width: "auto",
+  },
+  contentText: {
+    padding: "0 8px",
+  },
+  line: {
+    padding: "0",
+  },
+  splitView: {
+    width: "100%",
   },
 };
 
