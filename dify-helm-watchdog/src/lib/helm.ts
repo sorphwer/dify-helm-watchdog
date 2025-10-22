@@ -10,6 +10,12 @@ import semver from "semver";
 import type {
   CachePayload,
   HelmVersionEntry,
+  ImageValidationOverallStatus,
+  ImageValidationPayload,
+  ImageValidationRecord,
+  ImageVariantCheck,
+  ImageVariantName,
+  ImageVariantStatus,
   StoredAsset,
   StoredVersion,
 } from "./types";
@@ -20,8 +26,12 @@ const STORAGE_PREFIX = "helm-watchdog";
 const CACHE_PATH = `${STORAGE_PREFIX}/cache.json`;
 const VALUES_PREFIX = `${STORAGE_PREFIX}/values`;
 const IMAGES_PREFIX = `${STORAGE_PREFIX}/images`;
+const IMAGE_VALIDATION_PREFIX = `${STORAGE_PREFIX}/image-validation`;
 const LOCAL_CACHE_DIR = path.join(process.cwd(), ".cache", "helm");
 const LOCAL_CACHE_PATH = path.join(LOCAL_CACHE_DIR, "cache.json");
+
+const DEFAULT_CODING_REGISTRY_HOST = "g-hsod9681-docker.pkg.coding.net";
+const DEFAULT_CODING_REGISTRY_NAMESPACE = "dify-artifact/dify";
 
 // Use local file system cache only in development/local environments
 // In production (Vercel), use Blob storage as the primary persistent storage
@@ -159,9 +169,12 @@ const attachLocalAssetContent = async (
 
   const versions = await Promise.all(
     payload.versions.map(async (version) => {
-      const [valuesInline, imagesInline] = await Promise.all([
+      const [valuesInline, imagesInline, validationInline] = await Promise.all([
         readLocalAsset(version.values.path),
         readLocalAsset(version.images.path),
+        version.imageValidation
+          ? readLocalAsset(version.imageValidation.path)
+          : Promise.resolve(null),
       ]);
 
       return {
@@ -174,6 +187,12 @@ const attachLocalAssetContent = async (
           ...version.images,
           inline: imagesInline ?? undefined,
         },
+        imageValidation: version.imageValidation
+          ? {
+              ...version.imageValidation,
+              inline: validationInline ?? undefined,
+            }
+          : undefined,
       };
     }),
   );
@@ -196,6 +215,9 @@ const sanitizeCachePayload = (payload: CachePayload): CachePayload => ({
     ...version,
     values: sanitizeAsset(version.values),
     images: sanitizeAsset(version.images),
+    ...(version.imageValidation
+      ? { imageValidation: sanitizeAsset(version.imageValidation) }
+      : {}),
   })),
 });
 
@@ -203,12 +225,14 @@ export interface SyncResult {
   processed: number;
   created: number;
   skipped: number;
+  refreshed: string[];
   versions: string[];
   lastUpdated: string;
 }
 
 export interface SyncOptions {
   log?: (message: string) => void;
+  forceVersions?: string[];
 }
 
 export class MissingBlobTokenError extends Error {
@@ -368,7 +392,9 @@ const collectImages = (
   }
 };
 
-const buildImagesYaml = (valuesYaml: string): string => {
+const extractImageEntries = (
+  valuesYaml: string,
+): Array<[string, ImageEntry]> => {
   const doc = YAML.parseDocument(valuesYaml, {
     uniqueKeys: false,
   });
@@ -390,7 +416,11 @@ const buildImagesYaml = (valuesYaml: string): string => {
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   });
 
-  const imagesObject = sortedEntries.reduce<Record<string, ImageEntry>>(
+  return sortedEntries;
+};
+
+const buildImagesYaml = (entries: Array<[string, ImageEntry]>): string => {
+  const imagesObject = entries.reduce<Record<string, ImageEntry>>(
     (acc, [key, value]) => {
       acc[key] = value;
       return acc;
@@ -403,6 +433,392 @@ const buildImagesYaml = (valuesYaml: string): string => {
   }
 
   return YAML.stringify(imagesObject);
+};
+
+const resolveTargetImageName = (repository: string): string => {
+  const segments = repository.split("/");
+  const name = segments[segments.length - 1] ?? repository;
+  return name;
+};
+
+const MANIFEST_ACCEPT_HEADER =
+  "application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json";
+
+const CODING_REGISTRY_HOST =
+  process.env.CODING_REGISTRY_HOST ?? DEFAULT_CODING_REGISTRY_HOST;
+const CODING_REGISTRY_NAMESPACE =
+  process.env.CODING_REGISTRY_NAMESPACE ?? DEFAULT_CODING_REGISTRY_NAMESPACE;
+const CODING_REGISTRY_AUTH_HEADER =
+  process.env.CODING_REGISTRY_AUTH ??
+  (process.env.CODING_REGISTRY_USERNAME &&
+  process.env.CODING_REGISTRY_PASSWORD
+    ? `Basic ${Buffer.from(`${process.env.CODING_REGISTRY_USERNAME}:${process.env.CODING_REGISTRY_PASSWORD}`).toString("base64")}`
+    : process.env.CODING_REGISTRY_BEARER_TOKEN
+      ? `Bearer ${process.env.CODING_REGISTRY_BEARER_TOKEN}`
+      : undefined);
+
+const IMAGE_VARIANT_NAMES: readonly ImageVariantName[] = [
+  "original",
+  "amd64",
+  "arm64",
+];
+
+type BearerChallenge = {
+  realm: string;
+  service?: string;
+  scope?: string;
+};
+
+const parseBearerChallenge = (header: string | null): BearerChallenge | null => {
+  if (!header) {
+    return null;
+  }
+
+  const trimmed = header.trim();
+  if (!trimmed.toLowerCase().startsWith("bearer ")) {
+    return null;
+  }
+
+  const params = trimmed
+    .slice("bearer ".length)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((acc, entry) => {
+      // Split only on the first '=' to handle URLs with query parameters
+      const equalIndex = entry.indexOf("=");
+      if (equalIndex === -1) {
+        return acc;
+      }
+      const key = entry.slice(0, equalIndex);
+      const rawValue = entry.slice(equalIndex + 1);
+      if (!key || !rawValue) {
+        return acc;
+      }
+      const value = rawValue.replace(/^"|"$/g, "");
+      acc[key.toLowerCase()] = value;
+      return acc;
+    }, {});
+
+  if (!params.realm) {
+    return null;
+  }
+
+  return {
+    realm: params.realm,
+    service: params.service,
+    scope: params.scope,
+  };
+};
+
+const registryTokenCache = new Map<string, Promise<string>>();
+
+const resolveRegistryToken = async (
+  challenge: BearerChallenge,
+  repositoryPath: string,
+): Promise<string> => {
+  const url = new URL(challenge.realm);
+
+  if (challenge.service) {
+    url.searchParams.set("service", challenge.service);
+  }
+
+  const scope =
+    challenge.scope ?? `repository:${repositoryPath}:pull`;
+  url.searchParams.set("scope", scope);
+
+  const cacheKey = `${url.toString()}`;
+  const cachedPromise = registryTokenCache.get(cacheKey);
+  if (cachedPromise) {
+    return cachedPromise;
+  }
+
+  const attemptTokenRequest = async (withAuth: boolean = false): Promise<string> => {
+    const requestHeaders: Record<string, string> = {
+      "User-Agent": "dify-helm-watchdog",
+    };
+    
+    // Add authentication header if requested and available
+    if (withAuth && CODING_REGISTRY_AUTH_HEADER) {
+      requestHeaders.Authorization = CODING_REGISTRY_AUTH_HEADER;
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: requestHeaders,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Registry token request failed with status ${response.status}`,
+      );
+    }
+
+    const body = (await response.json()) as {
+      token?: string;
+      access_token?: string;
+    };
+    const token = body.token ?? body.access_token;
+    if (!token) {
+      throw new Error("Registry token response did not include a token");
+    }
+    return token;
+  };
+
+  const request = (async () => {
+    try {
+      // First attempt: try without authentication (for public registries)
+      return await attemptTokenRequest(false);
+    } catch (error) {
+      // If failed and auth is configured, try with authentication
+      if (CODING_REGISTRY_AUTH_HEADER) {
+        try {
+          return await attemptTokenRequest(true);
+        } catch (authError) {
+          // If both attempts failed, throw the auth error
+          throw authError;
+        }
+      }
+      // If no auth configured, throw the original error
+      throw error;
+    }
+  })()
+    .catch((error) => {
+      registryTokenCache.delete(cacheKey);
+      throw error;
+    });
+
+  registryTokenCache.set(cacheKey, request);
+  return request;
+};
+
+const createVariantTag = (variant: ImageVariantName, baseTag: string): string => {
+  if (variant === "original") {
+    return baseTag;
+  }
+  return `${baseTag}-${variant}`;
+};
+
+const checkRegistryImage = async (
+  repositoryPath: string,
+  tag: string,
+): Promise<{
+  status: ImageVariantStatus;
+  httpStatus?: number;
+  error?: string;
+}> => {
+  const manifestUrl = `https://${CODING_REGISTRY_HOST.replace(/\/+$/, "")}/v2/${repositoryPath.replace(/^\/+/, "")}/manifests/${encodeURIComponent(tag)}`;
+  const headers: Record<string, string> = {
+    Accept: MANIFEST_ACCEPT_HEADER,
+    "User-Agent": "dify-helm-watchdog",
+  };
+
+  const handleResponse = (
+    response: Response,
+  ): { status: ImageVariantStatus; httpStatus?: number; error?: string } => {
+    if (response.ok) {
+      return { status: "found", httpStatus: response.status };
+    }
+
+    if (response.status === 404) {
+      return { status: "missing", httpStatus: response.status };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        status: "error",
+        httpStatus: response.status,
+        error: "Registry denied access to this image (unauthorized).",
+      };
+    }
+
+    if (response.status === 405 || response.status === 400) {
+      return {
+        status: "error",
+        httpStatus: response.status,
+        error: `Registry does not support ${response.status === 405 ? "HEAD" : "request"} for manifest lookup`,
+      };
+    }
+
+    return {
+      status: "error",
+      httpStatus: response.status,
+      error: `Registry responded with status ${response.status}`,
+    };
+  };
+
+  const performRequest = async (token?: string) => {
+    const requestHeaders: Record<string, string> = { ...headers };
+    if (token) {
+      requestHeaders.Authorization = `Bearer ${token}`;
+    } else if (CODING_REGISTRY_AUTH_HEADER) {
+      requestHeaders.Authorization = CODING_REGISTRY_AUTH_HEADER;
+    }
+
+    const headResponse = await fetch(manifestUrl, {
+      method: "HEAD",
+      headers: requestHeaders,
+    });
+
+    if (headResponse.status === 405 || headResponse.status === 400) {
+      const getResponse = await fetch(manifestUrl, {
+        method: "GET",
+        headers: requestHeaders,
+      });
+      return getResponse;
+    }
+
+    return headResponse;
+  };
+
+  try {
+    let response = await performRequest();
+    if (response.ok || response.status === 404 || response.status === 405 || response.status === 400) {
+      return handleResponse(response);
+    }
+
+    // For 401/403 responses, always attempt to get a token via Bearer challenge
+    // This works for both public registries (anonymous tokens) and private registries (authenticated tokens)
+    if (response.status === 401 || response.status === 403) {
+      const challenge = parseBearerChallenge(
+        response.headers.get("www-authenticate"),
+      );
+      if (challenge) {
+        try {
+          const token = await resolveRegistryToken(challenge, repositoryPath);
+          response = await performRequest(token);
+          return handleResponse(response);
+        } catch (tokenError) {
+          return {
+            status: "error",
+            httpStatus: response.status,
+            error: tokenError instanceof Error
+              ? `Failed to authorize registry request: ${tokenError.message}`
+              : "Failed to authorize registry request.",
+          };
+        }
+      }
+    }
+
+    return handleResponse(response);
+  } catch (error) {
+    return {
+      status: "error",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unexpected error while contacting registry",
+    };
+  }
+};
+
+const dedupeImageEntries = (
+  entries: Array<[string, ImageEntry]>,
+): Array<{ repository: string; tag: string; paths: string[] }> => {
+  const groups = new Map<
+    string,
+    { repository: string; tag: string; paths: Set<string> }
+  >();
+
+  for (const [pathKey, entry] of entries) {
+    const id = `${entry.repository}:${entry.tag}`;
+    const normalizedPath = pathKey || "root";
+    const existing = groups.get(id);
+
+    if (existing) {
+      existing.paths.add(normalizedPath);
+    } else {
+      groups.set(id, {
+        repository: entry.repository,
+        tag: entry.tag,
+        paths: new Set([normalizedPath]),
+      });
+    }
+  }
+
+  return Array.from(groups.values()).map((group) => ({
+    repository: group.repository,
+    tag: group.tag,
+    paths: Array.from(group.paths).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    ),
+  }));
+};
+
+const determineOverallStatus = (
+  variants: ImageVariantCheck[],
+): ImageValidationOverallStatus => {
+  const statuses = variants.map((variant) => variant.status);
+  if (statuses.every((status) => status === "found")) {
+    return "all_found";
+  }
+
+  if (statuses.every((status) => status === "missing")) {
+    return "missing";
+  }
+
+  if (statuses.some((status) => status === "error")) {
+    return "error";
+  }
+
+  return "partial";
+};
+
+const computeImageValidation = async (
+  version: string,
+  entries: Array<[string, ImageEntry]>,
+): Promise<ImageValidationPayload> => {
+  const groupedEntries = dedupeImageEntries(entries);
+  const checkedAt = new Date().toISOString();
+
+  const records: ImageValidationRecord[] = [];
+
+  for (const group of groupedEntries) {
+    const targetImageName = resolveTargetImageName(group.repository);
+    const repositoryPath = `${CODING_REGISTRY_NAMESPACE.replace(/\/+$/, "")}/${targetImageName}`;
+    const variants: ImageVariantCheck[] = [];
+
+    for (const variantName of IMAGE_VARIANT_NAMES) {
+      const tag = createVariantTag(variantName, group.tag);
+      const result = await checkRegistryImage(repositoryPath, tag);
+
+      variants.push({
+        name: variantName,
+        tag,
+        image: `${CODING_REGISTRY_HOST.replace(/\/+$/, "")}/${repositoryPath}:${tag}`,
+        status: result.status,
+        checkedAt,
+        ...(typeof result.httpStatus === "number"
+          ? { httpStatus: result.httpStatus }
+          : {}),
+        ...(result.error ? { error: result.error } : {}),
+      });
+    }
+
+    records.push({
+      sourceRepository: group.repository,
+      sourceTag: group.tag,
+      targetImageName,
+      paths: group.paths,
+      variants,
+      status: determineOverallStatus(variants),
+    });
+  }
+
+  records.sort((a, b) =>
+    a.targetImageName.localeCompare(b.targetImageName, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+
+  return {
+    version,
+    checkedAt,
+    host: CODING_REGISTRY_HOST,
+    namespace: CODING_REGISTRY_NAMESPACE,
+    images: records,
+  };
 };
 
 const computeHash = (input: string): string =>
@@ -422,10 +838,13 @@ const readBlob = async (path: string): Promise<HeadBlobResult | null> => {
 
 const fetchBlobContent = async (url: string): Promise<string> => {
   try {
+    // In Next.js ISR context, we need to bypass cache to get fresh content after revalidation
+    // This ensures users see updated image validation data after cron runs
     const response = await fetch(url, {
       headers: { "User-Agent": "dify-helm-watchdog" },
-      // Use 'force-cache' to leverage CDN caching for public blobs
-      cache: "force-cache",
+      // Use 'no-store' to bypass all caches and always fetch fresh content
+      // This is critical for ISR to work correctly with Vercel Blob storage
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -455,9 +874,12 @@ const enrichWithInlineContent = async (
   const enrichedVersions = await Promise.all(
     payload.versions.map(async (version) => {
       try {
-        const [valuesContent, imagesContent] = await Promise.all([
+        const [valuesContent, imagesContent, validationContent] = await Promise.all([
           fetchBlobContent(version.values.url),
           fetchBlobContent(version.images.url),
+          version.imageValidation
+            ? fetchBlobContent(version.imageValidation.url)
+            : Promise.resolve<string | undefined>(undefined),
         ]);
 
         return {
@@ -470,6 +892,12 @@ const enrichWithInlineContent = async (
             ...version.images,
             inline: imagesContent,
           },
+          imageValidation: version.imageValidation
+            ? {
+                ...version.imageValidation,
+                inline: validationContent,
+              }
+            : undefined,
         };
       } catch (error) {
         console.warn(
@@ -504,7 +932,10 @@ export const loadCache = async (): Promise<CachePayload | null> => {
       return null;
     }
 
-    const response = await fetch(cacheMetadata.downloadUrl);
+    // Bypass cache to ensure we get the latest cache.json after revalidation
+    const response = await fetch(cacheMetadata.downloadUrl, {
+      cache: "no-store",
+    });
     if (!response.ok) {
       return null;
     }
@@ -577,6 +1008,21 @@ export const syncHelmData = async (
 
   await ensureBlobAccess();
 
+  const forcedVersions = new Set(
+    (options.forceVersions ?? [])
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+      .map((value) => value.replace(/^[vV]/, "")),
+  );
+
+  if (forcedVersions.size > 0) {
+    log(
+      `Forcing refresh for versions: ${Array.from(forcedVersions)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+        .join(", ")}`,
+    );
+  }
+
   log("Fetching Helm repository index...");
   const indexEntries = await fetchHelmIndex();
   log(`Retrieved ${indexEntries.length} chart versions from index.`);
@@ -587,23 +1033,49 @@ export const syncHelmData = async (
   );
 
   const newVersions: StoredVersion[] = [];
-  const newVersionPayloads = new Map<string, { values: string; images: string }>();
+  const refreshedVersions: StoredVersion[] = [];
+  const processedVersionPayloads = new Map<
+    string,
+    { values: string; images: string; imageValidation: string }
+  >();
+  const matchedForcedVersions = new Set<string>();
 
   for (const entry of indexEntries) {
-    if (knownVersions.has(entry.version)) {
+    const wasKnown = knownVersions.has(entry.version);
+    const isForced = forcedVersions.has(entry.version);
+
+    if (isForced) {
+      matchedForcedVersions.add(entry.version);
+    }
+
+    if (wasKnown && !isForced) {
       log(`Skipping cached version ${entry.version}`);
       continue;
     }
 
-    log(`Processing new version ${entry.version}`);
+    if (isForced && wasKnown) {
+      log(`Refreshing cached version ${entry.version}`);
+    } else if (isForced && !wasKnown) {
+      log(`Processing new version ${entry.version} (forced)`);
+    } else {
+      log(`Processing new version ${entry.version}`);
+    }
+
     const chartUrl = toAbsoluteUrl(entry.urls[0]);
     log(`Downloading chart archive: ${chartUrl}`);
     const archive = await downloadChartArchive(chartUrl);
     const valuesYaml = await extractValuesYaml(archive);
-    const imagesYaml = buildImagesYaml(valuesYaml);
+    const imageEntries = extractImageEntries(valuesYaml);
+    const imagesYaml = buildImagesYaml(imageEntries);
+    const imageValidationPayload = await computeImageValidation(
+      entry.version,
+      imageEntries,
+    );
+    const imageValidationJson = JSON.stringify(imageValidationPayload, null, 2);
 
     const valuesPath = `${VALUES_PREFIX}/${entry.version}.yaml`;
     const imagesPath = `${IMAGES_PREFIX}/${entry.version}.yaml`;
+    const validationPath = `${IMAGE_VALIDATION_PREFIX}/${entry.version}.json`;
 
     const valuesAsset = await persistAsset(
       valuesPath,
@@ -617,6 +1089,12 @@ export const syncHelmData = async (
       "application/yaml",
     );
     log(`Stored docker-images.yaml at ${imagesAsset.path}`);
+    const imageValidationAsset = await persistAsset(
+      validationPath,
+      imageValidationJson,
+      "application/json",
+    );
+    log(`Stored image validation summary at ${imageValidationAsset.path}`);
 
     const storedVersion: StoredVersion = {
       version: entry.version,
@@ -626,14 +1104,31 @@ export const syncHelmData = async (
       digest: entry.digest,
       values: valuesAsset,
       images: imagesAsset,
+      imageValidation: imageValidationAsset,
     };
 
     knownVersions.set(entry.version, storedVersion);
-    newVersions.push(storedVersion);
-    newVersionPayloads.set(entry.version, {
+    processedVersionPayloads.set(entry.version, {
       values: valuesYaml,
       images: imagesYaml,
+      imageValidation: imageValidationJson,
     });
+    if (isForced && wasKnown) {
+      refreshedVersions.push(storedVersion);
+    } else {
+      newVersions.push(storedVersion);
+    }
+  }
+
+  if (forcedVersions.size > 0) {
+    const missingForces = Array.from(forcedVersions).filter(
+      (version) => !matchedForcedVersions.has(version),
+    );
+    for (const version of missingForces) {
+      log(
+        `Unable to refresh version ${version}: not found in Helm repository index.`,
+      );
+    }
   }
 
   const sortedVersions = sortVersions(Array.from(knownVersions.values()));
@@ -657,9 +1152,15 @@ export const syncHelmData = async (
   // For existing versions, skip if already cached locally
   if (shouldUseLocalCache) {
     for (const version of sortedVersions) {
-      const payloads = newVersionPayloads.get(version.version);
+      const payloads = processedVersionPayloads.get(version.version);
       await ensureLocalAssetCopy(version.values, payloads?.values);
       await ensureLocalAssetCopy(version.images, payloads?.images);
+      if (version.imageValidation) {
+        await ensureLocalAssetCopy(
+          version.imageValidation,
+          payloads?.imageValidation,
+        );
+      }
     }
   }
 
@@ -670,7 +1171,9 @@ export const syncHelmData = async (
   return {
     processed: indexEntries.length,
     created: newVersions.length,
-    skipped: indexEntries.length - newVersions.length,
+    skipped:
+      indexEntries.length - newVersions.length - refreshedVersions.length,
+    refreshed: refreshedVersions.map((entry) => entry.version),
     versions: newVersions.map((entry) => entry.version),
     lastUpdated: payload.lastUpdated,
   };

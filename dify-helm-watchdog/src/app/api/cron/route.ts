@@ -7,7 +7,20 @@ import {
 
 export const runtime = "nodejs";
 
-const createStreamResponse = () => {
+const createStreamResponse = (request: Request) => {
+  const url = new URL(request.url);
+  const forceVersions = Array.from(
+    new Set(
+      url
+        .searchParams
+        .getAll("version")
+        .flatMap((value) => value.split(","))
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+        .map((value) => value.replace(/^[vV]/, "")),
+    ),
+  );
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -16,16 +29,25 @@ const createStreamResponse = () => {
 
       write("== dify-helm-watchdog cron =="); // banner
 
+      if (forceVersions.length > 0) {
+        write(
+          `[input] force_versions=${forceVersions
+            .map((version) => `v${version}`)
+            .join(", ")}`,
+        );
+      }
+
       let statusLine = "[status] ok";
 
       try {
         let syncResult: SyncResult | null = null;
         syncResult = await syncHelmData({
           log: (message) => write(`[sync] ${message}`),
+          ...(forceVersions.length > 0 ? { forceVersions } : {}),
         });
 
         write(
-          `[result] processed=${syncResult.processed} created=${syncResult.created} skipped=${syncResult.skipped}`,
+          `[result] processed=${syncResult.processed} created=${syncResult.created} refreshed=${syncResult.refreshed.length} skipped=${syncResult.skipped}`,
         );
         if (syncResult.versions.length > 0) {
           write(
@@ -35,6 +57,15 @@ const createStreamResponse = () => {
           );
         } else {
           write("[result] no new versions detected");
+        }
+        if (syncResult.refreshed.length > 0) {
+          write(
+            `[result] refreshed_versions=${syncResult.refreshed
+              .map((version) => `v${version}`)
+              .join(", ")}`,
+          );
+        } else if (forceVersions.length > 0) {
+          write("[result] no cached versions refreshed");
         }
         write(`[result] lastUpdated=${syncResult.lastUpdated}`);
 
@@ -115,10 +146,10 @@ const createStreamResponse = () => {
   });
 };
 
-export async function GET() {
-  return createStreamResponse();
+export async function GET(request: Request) {
+  return createStreamResponse(request);
 }
 
-export async function POST() {
-  return createStreamResponse();
+export async function POST(request: Request) {
+  return createStreamResponse(request);
 }

@@ -12,8 +12,13 @@ import {
 } from "lucide-react";
 import ReactDiffViewer from "react-diff-viewer";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
-import type { CachePayload, StoredVersion } from "@/lib/types";
+import type {
+  CachePayload,
+  ImageValidationPayload,
+  StoredVersion,
+} from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
+import { ImageValidationTable } from "@/components/image-validation-table";
 
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
   variables: {
@@ -85,16 +90,41 @@ const formatDate = (input?: string | null) => {
   }).format(date);
 };
 
+const parseValidationPayload = (
+  raw: string | undefined | null,
+): { payload: ImageValidationPayload | null; error: string | null } => {
+  if (!raw) {
+    return { payload: null, error: null };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as ImageValidationPayload;
+    return { payload: parsed, error: null };
+  } catch (thrown) {
+    return {
+      payload: null,
+      error:
+        thrown instanceof Error
+          ? `Failed to parse image validation data: ${thrown.message}`
+          : "Failed to parse image validation data.",
+    };
+  }
+};
+
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(
     versions[0]?.version ?? null,
   );
-  const [activeArtifact, setActiveArtifact] = useState<"values" | "images">(
-    "values",
-  );
+  const [activeArtifact, setActiveArtifact] = useState<
+    "values" | "images" | "validation"
+  >("values");
   const [valuesContent, setValuesContent] = useState<string>("");
   const [imagesContent, setImagesContent] = useState<string>("");
+  const [validationData, setValidationData] =
+    useState<ImageValidationPayload | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [hasValidationAsset, setHasValidationAsset] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadFlag, setReloadFlag] = useState(0);
@@ -123,10 +153,15 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     );
   }, [versions]);
 
+
   useEffect(() => {
     if (!selectedVersion) {
       setValuesContent("");
       setImagesContent("");
+      setValidationData(null);
+      setValidationError(null);
+      setHasValidationAsset(false);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -138,44 +173,64 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
     const isReloading =
       reloadTarget === selectedVersion && reloadFlag > processedReload;
-    
-    // With ISR optimization, inline content is preloaded on the server
-    // This eliminates client-side fetch requests in production
+
     const hasLocalValues = typeof version.values.inline === "string";
     const hasLocalImages = typeof version.images.inline === "string";
+    const validationAsset = version.imageValidation;
+    const hasAsset = Boolean(validationAsset);
+    setHasValidationAsset(hasAsset);
 
-    if (hasLocalValues) {
-      setValuesContent(version.values.inline ?? "");
+    const hasLocalValidation =
+      hasAsset && typeof validationAsset?.inline === "string";
+
+    setValuesContent(hasLocalValues ? version.values.inline ?? "" : "");
+    setImagesContent(hasLocalImages ? version.images.inline ?? "" : "");
+
+    if (hasLocalValidation) {
+      const { payload, error: inlineError } = parseValidationPayload(
+        validationAsset?.inline ?? null,
+      );
+      setValidationData(payload);
+      setValidationError(inlineError);
+      setError(inlineError);
     } else {
-      setValuesContent("");
+      setValidationData(null);
+      setValidationError(null);
+      if (!hasAsset) {
+        setError(null);
+      }
     }
 
-    if (hasLocalImages) {
-      setImagesContent(version.images.inline ?? "");
-    } else {
-      setImagesContent("");
-    }
-
-    // Fallback: fetch from Blob only if inline content is missing
-    // This should rarely happen with ISR, but provides resilience
     const shouldFetchValues = !hasLocalValues;
     const shouldFetchImages = !hasLocalImages;
+    const shouldFetchValidation =
+      hasAsset && (!hasLocalValidation || isReloading);
 
-    if (!shouldFetchValues && !shouldFetchImages && !isReloading) {
+    if (
+      !shouldFetchValues &&
+      !shouldFetchImages &&
+      !shouldFetchValidation &&
+      !isReloading
+    ) {
       setLoading(false);
-      setError(null);
       return;
     }
 
     let cancelled = false;
+
     const loadContent = async () => {
       try {
-        if (shouldFetchValues || shouldFetchImages || isReloading) {
+        if (
+          shouldFetchValues ||
+          shouldFetchImages ||
+          shouldFetchValidation ||
+          isReloading
+        ) {
           setLoading(true);
         }
         setError(null);
 
-        const [valuesText, imagesText] = await Promise.all([
+        const [valuesText, imagesText, validationText] = await Promise.all([
           shouldFetchValues || isReloading
             ? fetch(version.values.url).then((response) => {
                 if (!response.ok) {
@@ -192,24 +247,54 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                 return response.text();
               })
             : Promise.resolve(version.images.inline ?? ""),
+          shouldFetchValidation
+            ? fetch(validationAsset!.url).then((response) => {
+                if (!response.ok) {
+                  throw new Error("Failed to download image validation payload");
+                }
+                return response.text();
+              })
+            : Promise.resolve(
+                typeof validationAsset?.inline === "string"
+                  ? validationAsset.inline
+                  : null,
+              ),
         ]);
 
         if (!cancelled) {
           setValuesContent(valuesText);
           setImagesContent(imagesText);
+
+          if (hasAsset) {
+            const { payload, error: parsedError } = parseValidationPayload(
+              validationText,
+            );
+            setValidationData(payload);
+            setValidationError(parsedError);
+            setError(parsedError);
+          } else {
+            setValidationData(null);
+            setValidationError(null);
+            setError(null);
+          }
         }
       } catch (thrown) {
         if (!cancelled) {
-          setError(
+          const message =
             thrown instanceof Error
               ? thrown.message
-              : "Unexpected error while loading YAML artifacts.",
-          );
+              : "Unexpected error while loading cached artifacts.";
+          setError(message);
+
           if (shouldFetchValues || isReloading) {
             setValuesContent("");
           }
           if (shouldFetchImages || isReloading) {
             setImagesContent("");
+          }
+          if (hasAsset) {
+            setValidationData(null);
+            setValidationError(message);
           }
         }
       } finally {
@@ -224,25 +309,37 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       }
     };
 
-    if (shouldFetchValues || shouldFetchImages || isReloading) {
+    if (
+      shouldFetchValues ||
+      shouldFetchImages ||
+      shouldFetchValidation ||
+      isReloading
+    ) {
       void loadContent();
     }
 
     return () => {
       cancelled = true;
     };
-  }, [selectedVersion, versionMap, reloadFlag, reloadTarget, processedReload]);
+  }, [
+    selectedVersion,
+    versionMap,
+    reloadFlag,
+    reloadTarget,
+    processedReload,
+  ]);
 
   const handleRetry = () => {
     setReloadTarget(selectedVersion);
     setReloadFlag((value) => value + 1);
   };
 
-  const artifactTabs = useMemo(
+  const codeTabs = useMemo(
     () => [
       {
         id: "values" as const,
         label: "values.yaml",
+        type: "code" as const,
         content:
           valuesContent || "# Sync job has not cached this artifact yet.",
         language: "yaml",
@@ -250,12 +347,25 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       {
         id: "images" as const,
         label: "image versions",
+        type: "code" as const,
         content:
           imagesContent || "# Sync job has not cached this artifact yet.",
         language: "yaml",
       },
     ],
     [valuesContent, imagesContent],
+  );
+
+  const artifactTabs = useMemo(
+    () => [
+      ...codeTabs,
+      {
+        id: "validation" as const,
+        label: "image availability",
+        type: "validation" as const,
+      },
+    ],
+    [codeTabs],
   );
 
   const loadVersionArtifacts = async (version: StoredVersion) => {
@@ -357,8 +467,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const activeTab =
     artifactTabs.find((tab) => tab.id === activeArtifact) ??
     artifactTabs[0];
+  const diffActiveTabId =
+    activeArtifact === "images" ? "images" : "values";
   const diffActiveContent =
-    activeArtifact === "values" ? diffValuesContent : diffImagesContent;
+    diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   return (
     <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 overflow-hidden px-4 py-6 md:px-6 lg:px-8">
@@ -546,13 +658,24 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                   <Loader2 className="h-6 w-6 animate-spin text-accent" />
                 </div>
               )}
-              <CodeBlock
-                label={activeTab.label}
-                value={activeTab.content}
-                language={activeTab.language}
-                version={selectedVersion ?? undefined}
-                className="mx-auto h-full w-full max-w-4xl"
-              />
+              {activeTab.type === "code" ? (
+                <CodeBlock
+                  label={activeTab.label}
+                  value={activeTab.content}
+                  language={activeTab.language}
+                  version={selectedVersion ?? undefined}
+                  className="mx-auto h-full w-full max-w-4xl"
+                />
+              ) : (
+                <ImageValidationTable
+                  version={selectedVersion ?? undefined}
+                  data={validationData}
+                  error={validationError}
+                  loading={loading}
+                  hasAsset={hasValidationAsset}
+                  onRetry={handleRetry}
+                />
+              )}
             </div>
           </div>
         </article>
@@ -593,8 +716,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             </header>
             <div className="flex items-center justify-center gap-4">
               <div className="flex w-full justify-center rounded-full border border-white/12 bg-black/60 p-1">
-                {artifactTabs.map((tab) => {
-                  const isActive = tab.id === activeTab.id;
+                {codeTabs.map((tab) => {
+                  const isActive = tab.id === diffActiveTabId;
                   return (
                     <button
                       key={tab.id}
