@@ -442,7 +442,7 @@ const resolveTargetImageName = (repository: string): string => {
 };
 
 const MANIFEST_ACCEPT_HEADER =
-  "application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json";
+  "application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.oci.image.index.v1+json";
 
 const CODING_REGISTRY_HOST =
   process.env.CODING_REGISTRY_HOST ?? DEFAULT_CODING_REGISTRY_HOST;
@@ -749,18 +749,32 @@ const determineOverallStatus = (
   variants: ImageVariantCheck[],
 ): ImageValidationOverallStatus => {
   const statuses = variants.map((variant) => variant.status);
+  
+  // If all variants are found, it's perfect
   if (statuses.every((status) => status === "found")) {
     return "all_found";
   }
 
+  // If all variants are missing, no image is available
   if (statuses.every((status) => status === "missing")) {
     return "missing";
   }
 
+  // If any variant has an error, report it
   if (statuses.some((status) => status === "error")) {
     return "error";
   }
 
+  // For partial status: check if original (multi-arch) exists
+  // Most images only publish multi-arch manifests without architecture-specific tags
+  // If the original tag exists, the image is fully usable even if -amd64/-arm64 tags don't exist
+  const originalVariant = variants.find((v) => v.name === "original");
+  if (originalVariant && originalVariant.status === "found") {
+    // Original exists, so the image is usable - treat as all_found
+    return "all_found";
+  }
+
+  // Only report partial if we have some architecture-specific tags but not all
   return "partial";
 };
 
