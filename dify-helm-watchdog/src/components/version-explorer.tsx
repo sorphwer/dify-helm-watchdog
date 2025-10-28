@@ -111,6 +111,23 @@ const parseValidationPayload = (
   }
 };
 
+const ensureImageTagsQuoted = (input: string): string =>
+  input.replace(
+    /^(\s*tag:\s*)([^"'#\n][^#\n]*?)(\s*)(#.*)?$/gm,
+    (match, prefix, rawValue, spacing = "", comment = "") => {
+      const trimmed = rawValue.trim();
+      if (!trimmed || trimmed.startsWith('"') || trimmed.startsWith("'")) {
+        return match;
+      }
+
+      const escaped = trimmed
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"');
+
+      return `${prefix}"${escaped}"${spacing}${comment}`;
+    },
+  );
+
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(
@@ -184,7 +201,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       hasAsset && typeof validationAsset?.inline === "string";
 
     setValuesContent(hasLocalValues ? version.values.inline ?? "" : "");
-    setImagesContent(hasLocalImages ? version.images.inline ?? "" : "");
+    setImagesContent(
+      hasLocalImages ? ensureImageTagsQuoted(version.images.inline ?? "") : "",
+    );
 
     if (hasLocalValidation) {
       const { payload, error: inlineError } = parseValidationPayload(
@@ -263,7 +282,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
         if (!cancelled) {
           setValuesContent(valuesText);
-          setImagesContent(imagesText);
+          setImagesContent(ensureImageTagsQuoted(imagesText));
 
           if (hasAsset) {
             const { payload, error: parsedError } = parseValidationPayload(
@@ -387,7 +406,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
     return {
       values: valuesText,
-      images: imagesText,
+      images: ensureImageTagsQuoted(imagesText),
     };
   };
 
