@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   CalendarClock,
   Diff,
+  FileUp,
   Info,
   Loader2,
   Maximize2,
@@ -16,6 +17,7 @@ import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import ReactDiffViewer from "react-diff-viewer";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
+import YAML from "yaml";
 import type {
   CachePayload,
   ImageValidationPayload,
@@ -24,6 +26,7 @@ import type {
 import { CodeBlock } from "@/components/ui/code-block";
 import { ImageValidationTable } from "@/components/image-validation-table";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ValuesWizard } from "@/components/values-wizard";
 
 // Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
@@ -188,6 +191,15 @@ const ensureImageTagsQuoted = (input: string): string =>
     },
   );
 
+// Helper for parsing image metadata
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+interface ImageTagEntry {
+  repository?: string;
+  tag?: string;
+}
+
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const { resolvedTheme } = useTheme();
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -226,11 +238,41 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [diffError, setDiffError] = useState<string | null>(null);
   const diffRequestRef = useRef(0);
 
+  // Wizard state
+  const [wizardOpen, setWizardOpen] = useState(false);
+
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
       versions.map((entry) => [entry.version, entry]),
     );
   }, [versions]);
+
+  const imageTagMap = useMemo(() => {
+    if (!imagesContent) {
+      return null;
+    }
+
+    try {
+      const parsed = YAML.parse(imagesContent);
+      if (!isRecord(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, ImageTagEntry>;
+    } catch (error) {
+      console.warn("[version-explorer] Failed to parse image tag manifest", error);
+      return null;
+    }
+  }, [imagesContent]);
+
+  // Wizard handlers
+  const handleOpenWizard = useCallback(() => {
+    setWizardOpen(true);
+  }, []);
+
+  const handleCloseWizard = useCallback(() => {
+    setWizardOpen(false);
+  }, []);
 
 
   useEffect(() => {
@@ -725,6 +767,26 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                             <Diff className="h-4 w-4" />
                           </motion.button>
                         ) : null}
+                        {isActive ? (
+                          <motion.button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenWizard();
+                            }}
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground transition-colors hover:border-primary-foreground/50 hover:bg-primary-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label="Update values.yaml tags"
+                            title="Sync image tags to your values.yaml"
+                          >
+                            <FileUp className="h-4 w-4" />
+                          </motion.button>
+                        ) : null}
                       </div>
                     </motion.li>
                   );
@@ -959,6 +1021,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           </motion.div>
         </div>
       ) : null}
+
+      <ValuesWizard
+        isOpen={wizardOpen}
+        onClose={handleCloseWizard}
+        selectedVersion={selectedVersion}
+        imageTagMap={imageTagMap}
+      />
     </div>
   );
 }
