@@ -111,6 +111,7 @@ const diffViewerStyles: ReactDiffViewerStylesOverride = {
   },
   content: {
     width: "auto",
+    fontSize: "11px",
   },
   contentText: {
     padding: "0 12px",
@@ -266,7 +267,6 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const handleCloseWizard = useCallback(() => {
     setWizardOpen(false);
   }, []);
-
 
   useEffect(() => {
     if (!selectedVersion) {
