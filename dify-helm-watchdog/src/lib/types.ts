@@ -65,3 +65,19 @@ export interface ImageValidationPayload {
   namespace: string;
   images: ImageValidationRecord[];
 }
+
+export interface HeadResult {
+  url: string;
+  pathname: string;
+  size: number;
+  uploadedAt: Date;
+  downloadedAt?: Date;
+  downloadUrl?: string; // For compatibility with Vercel Blob
+}
+
+export interface Storage {
+  read(path: string): Promise<HeadResult | null>;
+  readContent(url: string): Promise<string>;
+  write(path: string, content: string, contentType: string): Promise<StoredAsset>;
+  ensureAccess(): Promise<void>;
+}

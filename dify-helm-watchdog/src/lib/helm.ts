@@ -1,9 +1,6 @@
-import crypto from "node:crypto";
 import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createGunzip } from "node:zlib";
-import { BlobNotFoundError, head, put } from "@vercel/blob";
-import type { HeadBlobResult } from "@vercel/blob";
 import tar from "tar-stream";
 import YAML from "yaml";
 import semver from "semver";
@@ -19,19 +16,28 @@ import type {
   StoredAsset,
   StoredVersion,
 } from "./types";
+import {
+  HELM_INDEX_URL,
+  HELM_REPO_BASE,
+  CACHE_PATH,
+  VALUES_PREFIX,
+  IMAGES_PREFIX,
+  IMAGE_VALIDATION_PREFIX,
+  LOCAL_CACHE_DIR_RELATIVE,
+  LOCAL_CACHE_PATH_RELATIVE,
+  DEFAULT_CODING_REGISTRY_HOST,
+  DEFAULT_CODING_REGISTRY_NAMESPACE,
+  MANIFEST_ACCEPT_HEADER,
+  IMAGE_VARIANT_NAMES,
+} from "../constants/helm";
+import { createStorageService } from "../services/storage";
 
-const HELM_INDEX_URL = "https://langgenius.github.io/dify-helm/index.yaml";
-const HELM_REPO_BASE = "https://langgenius.github.io/dify-helm/";
-const STORAGE_PREFIX = "helm-watchdog";
-const CACHE_PATH = `${STORAGE_PREFIX}/cache.json`;
-const VALUES_PREFIX = `${STORAGE_PREFIX}/values`;
-const IMAGES_PREFIX = `${STORAGE_PREFIX}/images`;
-const IMAGE_VALIDATION_PREFIX = `${STORAGE_PREFIX}/image-validation`;
-const LOCAL_CACHE_DIR = path.join(process.cwd(), ".cache", "helm");
-const LOCAL_CACHE_PATH = path.join(LOCAL_CACHE_DIR, "cache.json");
 
-const DEFAULT_CODING_REGISTRY_HOST = "g-hsod9681-docker.pkg.coding.net";
-const DEFAULT_CODING_REGISTRY_NAMESPACE = "dify-artifact/dify";
+const storage = createStorageService();
+
+// Resolve local cache paths to absolute paths
+const LOCAL_CACHE_DIR = path.join(process.cwd(), LOCAL_CACHE_DIR_RELATIVE);
+const LOCAL_CACHE_PATH = path.join(process.cwd(), LOCAL_CACHE_PATH_RELATIVE);
 
 // Use local file system cache only in development/local environments
 // In production (Vercel), use Blob storage as the primary persistent storage
@@ -244,14 +250,7 @@ export class MissingBlobTokenError extends Error {
 }
 
 const ensureBlobAccess = async (): Promise<void> => {
-  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_RW_TOKEN) {
-    return;
-  }
-
-  // When deployed on Vercel the token is injected automatically, but in local dev we need a safeguard.
-  if (!process.env.VERCEL) {
-    throw new MissingBlobTokenError();
-  }
+  return await storage.ensureAccess();
 };
 
 const fetchHelmIndex = async (): Promise<HelmVersionEntry[]> => {
@@ -441,9 +440,6 @@ const resolveTargetImageName = (repository: string): string => {
   return name;
 };
 
-const MANIFEST_ACCEPT_HEADER =
-  "application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.oci.image.index.v1+json";
-
 const CODING_REGISTRY_HOST =
   process.env.CODING_REGISTRY_HOST ?? DEFAULT_CODING_REGISTRY_HOST;
 const CODING_REGISTRY_NAMESPACE =
@@ -457,11 +453,6 @@ const CODING_REGISTRY_AUTH_HEADER =
       ? `Bearer ${process.env.CODING_REGISTRY_BEARER_TOKEN}`
       : undefined);
 
-const IMAGE_VARIANT_NAMES: readonly ImageVariantName[] = [
-  "original",
-  "amd64",
-  "arm64",
-];
 
 type BearerChallenge = {
   realm: string;
@@ -835,44 +826,7 @@ const computeImageValidation = async (
   };
 };
 
-const computeHash = (input: string): string =>
-  crypto.createHash("sha256").update(input).digest("hex");
 
-const readBlob = async (path: string): Promise<HeadBlobResult | null> => {
-  try {
-    const metadata = await head(path);
-    return metadata;
-  } catch (error) {
-    if (error instanceof BlobNotFoundError) {
-      return null;
-    }
-    throw error;
-  }
-};
-
-const fetchBlobContent = async (url: string): Promise<string> => {
-  try {
-    // In Next.js ISR context, we need to bypass cache to get fresh content after revalidation
-    // This ensures users see updated image validation data after cron runs
-    const response = await fetch(url, {
-      headers: { "User-Agent": "dify-helm-watchdog" },
-      // Use 'no-store' to bypass all caches and always fetch fresh content
-      // This is critical for ISR to work correctly with Vercel Blob storage
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch blob content from ${url}: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    return await response.text();
-  } catch (error) {
-    console.error(`[helm-cache] Failed to fetch blob content from ${url}`, error);
-    throw error;
-  }
-};
 
 const enrichWithInlineContent = async (
   payload: CachePayload,
@@ -889,10 +843,10 @@ const enrichWithInlineContent = async (
     payload.versions.map(async (version) => {
       try {
         const [valuesContent, imagesContent, validationContent] = await Promise.all([
-          fetchBlobContent(version.values.url),
-          fetchBlobContent(version.images.url),
+          storage.readContent(version.values.url),
+          storage.readContent(version.images.url),
           version.imageValidation
-            ? fetchBlobContent(version.imageValidation.url)
+            ? storage.readContent(version.imageValidation.url)
             : Promise.resolve<string | undefined>(undefined),
         ]);
 
@@ -941,20 +895,13 @@ export const loadCache = async (): Promise<CachePayload | null> => {
       return enrichWithInlineContent(sanitizedLocal);
     }
 
-    const cacheMetadata = await readBlob(CACHE_PATH);
+    const cacheMetadata = await storage.read(CACHE_PATH);
     if (!cacheMetadata) {
       return null;
     }
 
     // Bypass cache to ensure we get the latest cache.json after revalidation
-    const response = await fetch(cacheMetadata.downloadUrl, {
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      return null;
-    }
-
-    const text = await response.text();
+    const text = await storage.readContent(cacheMetadata.downloadUrl!);
     const payload = JSON.parse(text) as CachePayload;
     const sanitizedRemote = sanitizeCachePayload(payload);
 
@@ -979,22 +926,14 @@ const persistAsset = async (
   content: string,
   contentType: string,
 ): Promise<StoredAsset> => {
-  const hash = computeHash(content);
-  const result = await put(path, content, {
-    access: "public",
-    contentType,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-  });
+  const asset = await storage.write(path, content, contentType);
 
-  // Always write local copy for all assets (including cache.json)
-  await writeLocalAsset(result.pathname, content);
+  // In local mode, also ensure local copy exists (for consistency with existing logic)
+  if (process.env.ENABLE_LOCAL_MODE === "true") {
+    await writeLocalAsset(path, content);
+  }
 
-  return {
-    path: result.pathname,
-    url: result.url,
-    hash,
-  };
+  return asset;
 };
 
 const toAbsoluteUrl = (url: string): string =>
