@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
+  ArrowRight,
   ArrowUpRight,
   CalendarClock,
-  Diff,
+  CheckCircle2,
+  FileDiff,
+  FileUp,
   Info,
   Loader2,
+  MapPinned,
   RefreshCw,
   X,
 } from "lucide-react";
@@ -19,6 +25,7 @@ import type {
 } from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ImageValidationTable } from "@/components/image-validation-table";
+import YAML from "yaml";
 
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
   variables: {
@@ -133,6 +140,100 @@ const ensureImageTagsQuoted = (input: string): string =>
     },
   );
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const normalizeScalar = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return null;
+};
+
+type WizardStepId = 1 | 2 | 3;
+
+interface ImageTagEntry {
+  repository?: string;
+  tag?: string;
+}
+
+interface TagChange {
+  key: string;
+  path: string;
+  repository?: string;
+  oldTag: string | null;
+  newTag: string;
+  status: "updated" | "unchanged" | "missing";
+}
+
+const WIZARD_STEPS: Array<{ id: WizardStepId; label: string }> = [
+  { id: 1, label: "Upload file" },
+  { id: 2, label: "Review tags" },
+  { id: 3, label: "Copy result" },
+];
+
+const applyImageTagUpdates = (
+  rawYaml: string,
+  imageMap: Record<string, ImageTagEntry>,
+): { changes: TagChange[]; updatedYaml: string } => {
+  const doc = YAML.parseDocument(rawYaml);
+  if (doc.errors.length > 0) {
+    throw doc.errors[0];
+  }
+
+  const changes: TagChange[] = [];
+
+  for (const [key, entry] of Object.entries(imageMap)) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const nextTag = normalizeScalar(entry.tag);
+    if (!nextTag) {
+      continue;
+    }
+
+    const segments = key.split(".");
+    const imagePath = [...segments, "image", "tag"];
+    const directPath = [...segments, "tag"];
+
+    let status: TagChange["status"] = "missing";
+    let previousValue: string | null = null;
+    let usedPath: string[] | null = null;
+
+    if (doc.hasIn(imagePath)) {
+      const current = doc.getIn(imagePath);
+      previousValue = normalizeScalar(current);
+      doc.setIn(imagePath, nextTag);
+      status = previousValue === nextTag ? "unchanged" : "updated";
+      usedPath = imagePath;
+    } else if (doc.hasIn(directPath)) {
+      const current = doc.getIn(directPath);
+      previousValue = normalizeScalar(current);
+      doc.setIn(directPath, nextTag);
+      status = previousValue === nextTag ? "unchanged" : "updated";
+      usedPath = directPath;
+    }
+
+    changes.push({
+      key,
+      path: (usedPath ?? imagePath).join("."),
+      repository: normalizeScalar(entry.repository) ?? undefined,
+      oldTag: previousValue,
+      newTag: nextTag,
+      status,
+    });
+  }
+
+  return {
+    changes,
+    updatedYaml: doc.toString(),
+  };
+};
+
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(
@@ -169,11 +270,328 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [diffError, setDiffError] = useState<string | null>(null);
   const diffRequestRef = useRef(0);
 
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedValuesText, setUploadedValuesText] = useState<string>("");
+  const [wizardError, setWizardError] = useState<string | null>(null);
+  const [tagChanges, setTagChanges] = useState<TagChange[]>([]);
+  const [updatedValuesYaml, setUpdatedValuesYaml] = useState<string>("");
+  const [wizardProcessing, setWizardProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
       versions.map((entry) => [entry.version, entry]),
     );
   }, [versions]);
+
+  const imageTagMap = useMemo(() => {
+    if (!imagesContent) {
+      return null;
+    }
+
+    try {
+      const parsed = YAML.parse(imagesContent);
+      if (!isRecord(parsed)) {
+        return null;
+      }
+
+      return parsed as Record<string, ImageTagEntry>;
+    } catch (error) {
+      console.warn("[version-explorer] Failed to parse image tag manifest", error);
+      return null;
+    }
+  }, [imagesContent]);
+
+  const resetWizardState = useCallback(() => {
+    setWizardStep(1);
+    setUploadedFileName(null);
+    setUploadedValuesText("");
+    setTagChanges([]);
+    setUpdatedValuesYaml("");
+    setWizardError(null);
+    setWizardProcessing(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, []);
+
+  const closeWizard = useCallback(() => {
+    setWizardOpen(false);
+    resetWizardState();
+  }, [resetWizardState]);
+
+  useEffect(() => {
+    resetWizardState();
+    setWizardOpen(false);
+  }, [selectedVersion, resetWizardState]);
+
+  const handleOpenWizard = useCallback(() => {
+    resetWizardState();
+    if (!imageTagMap || Object.keys(imageTagMap).length === 0) {
+      setWizardError(
+        "Image metadata for this release has not loaded yet. Once the artifacts are ready you can try again.",
+      );
+    }
+    setWizardOpen(true);
+  }, [imageTagMap, resetWizardState]);
+
+  const handleFileInputChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const [file] = event.target.files ?? [];
+      if (!file) {
+        return;
+      }
+
+      setWizardProcessing(true);
+      setWizardError(null);
+
+      try {
+        if (!imageTagMap || Object.keys(imageTagMap).length === 0) {
+          throw new Error(
+            "Image metadata has not loaded yet for this release. Wait for the artifacts to finish syncing and try again.",
+          );
+        }
+
+        const text = await file.text();
+        const { changes, updatedYaml } = applyImageTagUpdates(text, imageTagMap);
+
+        setUploadedFileName(file.name);
+        setUploadedValuesText(text);
+        setTagChanges(changes);
+        setUpdatedValuesYaml(updatedYaml);
+        setWizardStep(2);
+      } catch (thrown) {
+        const message =
+          thrown instanceof Error
+            ? thrown.message
+            : "Failed to process the uploaded values.yaml file.";
+        setWizardError(message);
+        setUploadedFileName(null);
+        setUploadedValuesText("");
+        setTagChanges([]);
+        setUpdatedValuesYaml("");
+      } finally {
+        setWizardProcessing(false);
+        if (event.target) {
+          // Allow uploading the same file again
+          event.target.value = "";
+        }
+      }
+    },
+    [imageTagMap],
+  );
+
+  const handleWizardPrev = useCallback(() => {
+    setWizardError(null);
+    setWizardStep((current) => (current > 1 ? ((current - 1) as WizardStepId) : current));
+  }, []);
+
+  const handleWizardNext = useCallback(() => {
+    if (wizardProcessing) {
+      return;
+    }
+
+    if (wizardStep === 1) {
+      if (!uploadedValuesText) {
+        setWizardError("Upload a values.yaml file to continue.");
+        return;
+      }
+      setWizardError(null);
+      setWizardStep(2);
+      return;
+    }
+
+    if (wizardStep === 2) {
+      if (!updatedValuesYaml) {
+        setWizardError(
+          "We could not generate an updated values.yaml file. Upload it again to retry.",
+        );
+        return;
+      }
+      setWizardError(null);
+      setWizardStep(3);
+      return;
+    }
+
+    closeWizard();
+  }, [closeWizard, updatedValuesYaml, uploadedValuesText, wizardProcessing, wizardStep]);
+
+  const imageMetadataReady = Boolean(
+    imageTagMap && Object.keys(imageTagMap).length > 0,
+  );
+
+  let wizardStepBody: JSX.Element;
+  if (wizardStep === 1) {
+    wizardStepBody = (
+      <div className="flex flex-col gap-4 rounded-2xl border border-white/12 bg-black/40 p-5">
+        <p className="text-sm text-muted">
+          Upload your existing <span className="font-mono text-foreground">values.yaml</span>.
+          The file never leaves your browser and is processed locally.
+        </p>
+        {!imageMetadataReady ? (
+          <div className="rounded-xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 text-xs text-amber-100">
+            Image tag metadata for this release is still syncing. Once the artifacts are ready you
+            can rerun this helper.
+          </div>
+        ) : null}
+        <div className="flex flex-col items-start gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".yaml,.yml,text/yaml,application/x-yaml"
+            className="hidden"
+            onChange={handleFileInputChange}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={wizardProcessing || !imageMetadataReady}
+            className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-transparent px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <FileUp className="h-4 w-4" />
+            Select values.yaml
+          </button>
+          {uploadedFileName ? (
+            <span className="text-xs text-muted">
+              Selected file:
+              <span className="ml-1 font-mono text-foreground">{uploadedFileName}</span>
+            </span>
+          ) : null}
+          {wizardProcessing ? (
+            <span className="inline-flex items-center gap-2 text-xs text-muted">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+              Processing in your browser...
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  } else if (wizardStep === 2) {
+    if (!uploadedValuesText) {
+      wizardStepBody = (
+        <div className="rounded-2xl border border-white/12 bg-black/40 p-6 text-sm text-muted">
+          Upload a values.yaml file to review tag changes.
+        </div>
+      );
+    } else {
+      const summary = tagChanges.reduce(
+        (acc, change) => {
+          acc[change.status] += 1;
+          return acc;
+        },
+        { updated: 0, unchanged: 0, missing: 0 } as Record<
+          TagChange["status"],
+          number
+        >,
+      );
+
+      wizardStepBody = (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-muted">
+            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3 py-1 text-emerald-100">
+              Updated {summary.updated}
+            </span>
+            <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">
+              Already current {summary.unchanged}
+            </span>
+            <span className="rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-amber-100">
+              Missing {summary.missing}
+            </span>
+          </div>
+          <div className="custom-scrollbar max-h-[360px] space-y-3 overflow-y-auto pr-1">
+            {tagChanges.length === 0 ? (
+              <div className="rounded-2xl border border-white/12 bg-black/40 p-6 text-sm text-muted">
+                No Docker image tags were detected in your values.yaml file.
+              </div>
+            ) : (
+              tagChanges.map((change) => {
+                const isMissing = change.status === "missing";
+                const isUpdated = change.status === "updated";
+                const statusLabel =
+                  change.status === "updated"
+                    ? "Updated"
+                    : change.status === "unchanged"
+                      ? "Already current"
+                      : "Not found";
+                const badgeClasses = isMissing
+                  ? "border border-amber-400/60 bg-amber-500/15 text-amber-100"
+                  : isUpdated
+                    ? "border border-emerald-400/50 bg-emerald-500/15 text-emerald-100"
+                    : "border border-white/20 bg-white/5 text-muted";
+                const StatusIcon = isMissing ? AlertTriangle : CheckCircle2;
+
+                return (
+                  <div
+                    key={change.key}
+                    className="flex flex-col gap-3 rounded-2xl border border-white/12 bg-black/40 p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <span className="text-sm font-semibold text-foreground">
+                          {change.key}
+                        </span>
+                        {change.repository ? (
+                          <span className="flex items-center text-xs text-muted">
+                            Repository:
+                            <span className="ml-1 font-mono text-foreground">
+                              {change.repository}
+                            </span>
+                          </span>
+                        ) : null}
+                        <span className="block font-mono text-[11px] text-muted">
+                          Path: {change.path}
+                        </span>
+                      </div>
+                      <span
+                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.3em] ${badgeClasses}`}
+                      >
+                        <StatusIcon className="h-3.5 w-3.5" />
+                        {statusLabel}
+                      </span>
+                    </div>
+                    {isMissing ? (
+                      <p className="text-xs text-amber-100">
+                        We could not find {change.path} in your overrides. Update it manually if needed.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-foreground">
+                        <span className="text-muted">was</span>
+                        <span>{change.oldTag ?? "—"}</span>
+                        <ArrowRight className="h-3 w-3 text-muted" />
+                        <span>{change.newTag}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      );
+    }
+  } else {
+    wizardStepBody = updatedValuesYaml ? (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted">
+          Copy the refreshed <span className="font-mono text-foreground">values.yaml</span>. Use the
+          copy button to paste it back into your environment.
+        </p>
+        <CodeBlock
+          label="values.yaml"
+          value={updatedValuesYaml}
+          language="yaml"
+          version={selectedVersion ?? undefined}
+          className="max-h-[420px]"
+        />
+      </div>
+    ) : (
+      <div className="rounded-2xl border border-white/12 bg-black/40 p-6 text-sm text-muted">
+        Upload your values.yaml file to generate an updated version.
+      </div>
+    );
+  }
 
 
   useEffect(() => {
@@ -550,6 +968,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                 {versions.map((version) => {
                   const isActive = version.version === selectedVersion;
                   const showDiffIcon = !isActive && Boolean(selectedVersion);
+                  const showWizardButton = isActive;
                   return (
                     <li key={version.version} className="mb-2 last:mb-0">
                       <div className="relative">
@@ -597,7 +1016,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           </div>
                           {version.createdAt && (
                             <span
-                              className={`mt-1 text-[10px] uppercase tracking-[0.2em] ${
+                              className={`mt-1 text-[10px] uppercase tracking-[0.08em] ${
                                 isActive ? "text-white/80" : "text-muted/80"
                               }`}
                             >
@@ -605,6 +1024,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                             </span>
                           )}
                         </button>
+                        {showWizardButton ? (
+                          <button
+                            type="button"
+                            onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                              event.stopPropagation();
+                              handleOpenWizard();
+                            }}
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:border-emerald-300/70 hover:bg-emerald-500/30 hover:text-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+                            aria-label="Open tag update wizard"
+                            title="Open tag update wizard"
+                          >
+                            <MapPinned className="h-3.5 w-3.5" />
+                            update tag to this
+                          </button>
+                        ) : null}
                         {showDiffIcon ? (
                           <button
                             type="button"
@@ -612,7 +1046,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xs text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/70 px-3 py-1 text-[10px] font-semibold text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -624,7 +1058,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                                 : "Compare versions"
                             }
                           >
-                            <Diff className="h-4 w-4" />
+                            <FileDiff className="h-3.5 w-3.5" />
+                            diff
                           </button>
                         ) : null}
                       </div>
@@ -704,6 +1139,114 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           </div>
         </article>
       </section>
+      {wizardOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
+          onClick={closeWizard}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wizard-dialog-title"
+        >
+          <div
+            className="relative flex w-full max-w-3xl flex-col gap-6 rounded-3xl border border-white/12 bg-[#080808] p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={closeWizard}
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/80 transition hover:border-white/40 hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              aria-label="Close update wizard"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <header className="flex flex-col gap-2 pr-12">
+              <span className="text-xs uppercase tracking-[0.3em] text-muted">
+                Synchronize image tags
+              </span>
+              <h2 id="wizard-dialog-title" className="text-2xl font-semibold text-foreground">
+                v{selectedVersion ?? "?"} values.yaml helper
+              </h2>
+              <p className="text-sm text-muted">
+                Refresh Docker image tags from the selected release without leaving your browser.
+              </p>
+            </header>
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  {WIZARD_STEPS.map((step, index) => {
+                    const isComplete = wizardStep > step.id;
+                    const isActive = wizardStep === step.id;
+                    const isLit = isActive || isComplete;
+                    return (
+                      <div key={step.id} className="flex flex-1 items-center gap-3">
+                        <span
+                          className={`inline-flex h-3.5 w-3.5 rounded-full transition-colors ${
+                            isLit
+                              ? "bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.65)]"
+                              : "bg-white/15"
+                          }`}
+                        />
+                        {index < WIZARD_STEPS.length - 1 ? (
+                          <span
+                            className={`h-px flex-1 ${
+                              isComplete ? "bg-emerald-400/60" : "bg-white/12"
+                            }`}
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-[10px] uppercase tracking-[0.35em] text-muted">
+                  {WIZARD_STEPS.map((step) => {
+                    const isLit = wizardStep >= step.id;
+                    return (
+                      <span
+                        key={step.id}
+                        className={`flex-1 text-center ${isLit ? "text-emerald-200" : ""}`}
+                      >
+                        {step.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              {wizardStepBody}
+              {wizardError ? (
+                <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                  {wizardError}
+                </div>
+              ) : null}
+            </div>
+            <footer className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                onClick={handleWizardPrev}
+                disabled={wizardStep === 1}
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted transition hover:border-white/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Previous
+              </button>
+              <div className="flex items-center gap-2 text-xs text-muted">
+                {wizardProcessing ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+                    Working...
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={handleWizardNext}
+                disabled={wizardProcessing}
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-400/60 bg-emerald-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-100 transition hover:border-emerald-300/80 hover:bg-emerald-500/30 hover:text-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {wizardStep === 3 ? "Finish" : "Next"}
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
       {diffModalOpen && diffMeta ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
