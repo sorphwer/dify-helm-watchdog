@@ -1,7 +1,6 @@
 import path from "node:path";
 import crypto from "node:crypto";
 import { BlobNotFoundError, head, put } from "@vercel/blob";
-import type { HeadBlobResult } from "@vercel/blob";
 import type { HeadResult, Storage, StoredAsset } from "../lib/types";
 import { LOCAL_CACHE_DIR_RELATIVE } from "../constants/helm";
 
@@ -125,7 +124,8 @@ export class LocalStorageService implements Storage {
     return await fs.readFile(filePath, "utf-8");
   }
 
-  async write(path: string, content: string, contentType: string): Promise<StoredAsset> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async write(path: string, content: string, _contentType: string): Promise<StoredAsset> {
     const fullPath = getLocalAssetPath(path);
     const hash = computeHash(content);
 

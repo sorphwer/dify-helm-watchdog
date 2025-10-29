@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-transparent text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         <ThemeProvider
           attribute="class"
@@ -36,12 +35,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="pointer-events-none fixed right-6 top-6 z-50 flex items-center">
-            <div className="pointer-events-auto">
-              <ThemeToggle />
-            </div>
+          {/* 主容器 - 统一控制边距和最大宽度 */}
+          <div className="mx-auto h-screen w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
+            {children}
           </div>
-          {children}
         </ThemeProvider>
       </body>
     </html>

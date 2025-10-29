@@ -39,11 +39,13 @@ const storage = createStorageService();
 const LOCAL_CACHE_DIR = path.join(process.cwd(), LOCAL_CACHE_DIR_RELATIVE);
 const LOCAL_CACHE_PATH = path.join(process.cwd(), LOCAL_CACHE_PATH_RELATIVE);
 
-// Use local file system cache only in development/local environments
-// In production (Vercel), use Blob storage as the primary persistent storage
+// Use local file system cache in the following cases:
+// 1. Local mode is enabled (ENABLE_LOCAL_MODE=true) - always use local cache
+// 2. Not on Vercel AND local cache is not explicitly disabled
 // Note: Vercel's file system is ephemeral and resets between deployments
 const shouldUseLocalCache =
-  process.env.VERCEL !== "1" && process.env.DISABLE_LOCAL_CACHE !== "true";
+  process.env.ENABLE_LOCAL_MODE === "true" ||
+  (process.env.VERCEL !== "1" && process.env.DISABLE_LOCAL_CACHE !== "true");
 
 const readLocalCache = async (): Promise<CachePayload | null> => {
   if (!shouldUseLocalCache) {
@@ -979,6 +981,16 @@ export const syncHelmData = async (
   log("Fetching Helm repository index...");
   const indexEntries = await fetchHelmIndex();
   log(`Retrieved ${indexEntries.length} chart versions from index.`);
+  
+  // In local mode, limit to latest 5 versions for faster development
+  const isLocalMode = process.env.ENABLE_LOCAL_MODE === "true";
+  const maxVersionsToProcess = isLocalMode ? 5 : Infinity;
+  const entriesToProcess = indexEntries.slice(0, maxVersionsToProcess);
+  
+  if (isLocalMode && indexEntries.length > maxVersionsToProcess) {
+    log(`Local mode: limiting to latest ${maxVersionsToProcess} versions (${indexEntries.length} total available)`);
+  }
+  
   const cache = await loadCache();
 
   const knownVersions = new Map<string, StoredVersion>(
@@ -993,7 +1005,7 @@ export const syncHelmData = async (
   >();
   const matchedForcedVersions = new Set<string>();
 
-  for (const entry of indexEntries) {
+  for (const entry of entriesToProcess) {
     const wasKnown = knownVersions.has(entry.version);
     const isForced = forcedVersions.has(entry.version);
 
@@ -1014,62 +1026,74 @@ export const syncHelmData = async (
       log(`Processing new version ${entry.version}`);
     }
 
-    const chartUrl = toAbsoluteUrl(entry.urls[0]);
-    log(`Downloading chart archive: ${chartUrl}`);
-    const archive = await downloadChartArchive(chartUrl);
-    const valuesYaml = await extractValuesYaml(archive);
-    const imageEntries = extractImageEntries(valuesYaml);
-    const imagesYaml = buildImagesYaml(imageEntries);
-    const imageValidationPayload = await computeImageValidation(
-      entry.version,
-      imageEntries,
-    );
-    const imageValidationJson = JSON.stringify(imageValidationPayload, null, 2);
+    try {
+      const chartUrl = toAbsoluteUrl(entry.urls[0]);
+      log(`Downloading chart archive: ${chartUrl}`);
+      const archive = await downloadChartArchive(chartUrl);
+      const valuesYaml = await extractValuesYaml(archive);
+      const imageEntries = extractImageEntries(valuesYaml);
+      const imagesYaml = buildImagesYaml(imageEntries);
+      const imageValidationPayload = await computeImageValidation(
+        entry.version,
+        imageEntries,
+      );
+      const imageValidationJson = JSON.stringify(imageValidationPayload, null, 2);
 
-    const valuesPath = `${VALUES_PREFIX}/${entry.version}.yaml`;
-    const imagesPath = `${IMAGES_PREFIX}/${entry.version}.yaml`;
-    const validationPath = `${IMAGE_VALIDATION_PREFIX}/${entry.version}.json`;
+      const valuesPath = `${VALUES_PREFIX}/${entry.version}.yaml`;
+      const imagesPath = `${IMAGES_PREFIX}/${entry.version}.yaml`;
+      const validationPath = `${IMAGE_VALIDATION_PREFIX}/${entry.version}.json`;
 
-    const valuesAsset = await persistAsset(
-      valuesPath,
-      valuesYaml,
-      "application/yaml",
-    );
-    log(`Stored values.yaml at ${valuesAsset.path}`);
-    const imagesAsset = await persistAsset(
-      imagesPath,
-      imagesYaml,
-      "application/yaml",
-    );
-    log(`Stored docker-images.yaml at ${imagesAsset.path}`);
-    const imageValidationAsset = await persistAsset(
-      validationPath,
-      imageValidationJson,
-      "application/json",
-    );
-    log(`Stored image validation summary at ${imageValidationAsset.path}`);
+      const valuesAsset = await persistAsset(
+        valuesPath,
+        valuesYaml,
+        "application/yaml",
+      );
+      log(`Stored values.yaml at ${valuesAsset.path}`);
+      const imagesAsset = await persistAsset(
+        imagesPath,
+        imagesYaml,
+        "application/yaml",
+      );
+      log(`Stored docker-images.yaml at ${imagesAsset.path}`);
+      const imageValidationAsset = await persistAsset(
+        validationPath,
+        imageValidationJson,
+        "application/json",
+      );
+      log(`Stored image validation summary at ${imageValidationAsset.path}`);
 
-    const storedVersion: StoredVersion = {
-      version: entry.version,
-      appVersion: entry.appVersion,
-      createdAt: entry.created,
-      chartUrl,
-      digest: entry.digest,
-      values: valuesAsset,
-      images: imagesAsset,
-      imageValidation: imageValidationAsset,
-    };
+      const storedVersion: StoredVersion = {
+        version: entry.version,
+        appVersion: entry.appVersion,
+        createdAt: entry.created,
+        chartUrl,
+        digest: entry.digest,
+        values: valuesAsset,
+        images: imagesAsset,
+        imageValidation: imageValidationAsset,
+      };
 
-    knownVersions.set(entry.version, storedVersion);
-    processedVersionPayloads.set(entry.version, {
-      values: valuesYaml,
-      images: imagesYaml,
-      imageValidation: imageValidationJson,
-    });
-    if (isForced && wasKnown) {
-      refreshedVersions.push(storedVersion);
-    } else {
-      newVersions.push(storedVersion);
+      knownVersions.set(entry.version, storedVersion);
+      processedVersionPayloads.set(entry.version, {
+        values: valuesYaml,
+        images: imagesYaml,
+        imageValidation: imageValidationJson,
+      });
+      if (isForced && wasKnown) {
+        refreshedVersions.push(storedVersion);
+      } else {
+        newVersions.push(storedVersion);
+      }
+    } catch (error) {
+      log(
+        `Failed to process version ${entry.version}: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+      console.error(
+        `[helm-sync] Failed to process version ${entry.version}`,
+        error,
+      );
+      // Continue to next version instead of failing the entire sync
+      continue;
     }
   }
 
@@ -1122,10 +1146,10 @@ export const syncHelmData = async (
   log("Helm sync completed.");
 
   return {
-    processed: indexEntries.length,
+    processed: entriesToProcess.length,
     created: newVersions.length,
     skipped:
-      indexEntries.length - newVersions.length - refreshedVersions.length,
+      entriesToProcess.length - newVersions.length - refreshedVersions.length,
     refreshed: refreshedVersions.map((entry) => entry.version),
     versions: newVersions.map((entry) => entry.version),
     lastUpdated: payload.lastUpdated,

@@ -7,9 +7,13 @@ import {
   Diff,
   Info,
   Loader2,
+  Maximize2,
+  Minimize2,
   RefreshCw,
   X,
 } from "lucide-react";
+import { motion } from "framer-motion";
+import { useTheme } from "next-themes";
 import ReactDiffViewer from "react-diff-viewer";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
 import type {
@@ -19,51 +23,107 @@ import type {
 } from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ImageValidationTable } from "@/components/image-validation-table";
+import { ThemeToggle } from "@/components/theme-toggle";
 
+// Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
   variables: {
+    light: {
+      diffViewerBackground: "oklch(99% 0 0)", // card background
+      diffViewerColor: "oklch(15% 0 0)", // foreground
+      // 绿色 - 新增内容
+      addedBackground: "rgba(34, 197, 94, 0.08)", // 淡绿色背景
+      addedColor: "oklch(25% 0 0)", // 深色文字
+      addedGutterBackground: "rgba(34, 197, 94, 0.12)",
+      wordAddedBackground: "rgba(34, 197, 94, 0.2)", // 高亮绿色
+      // 红色 - 删除内容
+      removedBackground: "rgba(239, 68, 68, 0.08)", // 淡红色背景
+      removedColor: "oklch(25% 0 0)", // 深色文字
+      removedGutterBackground: "rgba(239, 68, 68, 0.12)",
+      wordRemovedBackground: "rgba(239, 68, 68, 0.2)", // 高亮红色
+      // 其他
+      gutterBackground: "oklch(97% 0 0)",
+      gutterBackgroundDark: "oklch(95% 0 0)",
+      gutterColor: "oklch(50% 0 0)",
+      highlightBackground: "rgba(0, 51, 255, 0.08)", // brand blue
+      highlightGutterBackground: "rgba(0, 51, 255, 0.12)",
+      codeFoldGutterBackground: "oklch(95% 0 0)",
+      codeFoldBackground: "oklch(97% 0 0)",
+      emptyLineBackground: "oklch(98% 0 0)",
+      gutterColorLight: "oklch(60% 0 0)",
+      gutterColorDark: "oklch(40% 0 0)",
+      codeFoldContentColor: "oklch(50% 0 0)",
+      diffViewerTitleBackground: "oklch(97% 0 0)",
+      diffViewerTitleColor: "oklch(25% 0 0)",
+      diffViewerTitleBorderColor: "oklch(86% 0 0)",
+    },
     dark: {
-      diffViewerBackground: "transparent",
-      diffViewerColor: "rgba(235,235,245,0.85)",
-      addedBackground: "rgba(34,197,94,0.18)",
-      addedColor: "rgba(74,222,128,0.95)",
-      removedBackground: "rgba(248,113,113,0.2)",
-      removedColor: "rgba(252,165,165,0.95)",
-      wordAddedBackground: "rgba(34,197,94,0.35)",
-      wordRemovedBackground: "rgba(248,113,113,0.35)",
-      gutterBackground: "rgba(15,15,15,0.7)",
-      gutterBackgroundDark: "rgba(15,15,15,0.7)",
-      highlightBackground: "rgba(59,130,246,0.2)",
-      highlightGutterBackground: "rgba(59,130,246,0.2)",
+      diffViewerBackground: "oklch(18% 0 0)", // card background
+      diffViewerColor: "oklch(95% 0 0)", // foreground
+      // 绿色 - 新增内容
+      addedBackground: "rgba(34, 197, 94, 0.15)", // 淡绿色背景
+      addedColor: "oklch(95% 0 0)", // 亮色文字
+      addedGutterBackground: "rgba(34, 197, 94, 0.2)",
+      wordAddedBackground: "rgba(34, 197, 94, 0.3)", // 高亮绿色
+      // 红色 - 删除内容
+      removedBackground: "rgba(239, 68, 68, 0.15)", // 淡红色背景
+      removedColor: "oklch(95% 0 0)", // 亮色文字
+      removedGutterBackground: "rgba(239, 68, 68, 0.2)",
+      wordRemovedBackground: "rgba(239, 68, 68, 0.3)", // 高亮红色
+      // 其他
+      gutterBackground: "oklch(16% 0 0)",
+      gutterBackgroundDark: "oklch(14% 0 0)",
+      gutterColor: "oklch(65% 0 0)",
+      highlightBackground: "rgba(0, 51, 255, 0.15)", // brand blue
+      highlightGutterBackground: "rgba(0, 51, 255, 0.2)",
+      codeFoldGutterBackground: "oklch(20% 0 0)",
+      codeFoldBackground: "oklch(18% 0 0)",
+      emptyLineBackground: "oklch(17% 0 0)",
+      gutterColorLight: "oklch(55% 0 0)",
+      gutterColorDark: "oklch(75% 0 0)",
+      codeFoldContentColor: "oklch(65% 0 0)",
+      diffViewerTitleBackground: "oklch(16% 0 0)",
+      diffViewerTitleColor: "oklch(95% 0 0)",
+      diffViewerTitleBorderColor: "oklch(28% 0 0)",
     },
   },
   gutter: {
-    color: "rgba(148,163,184,0.65)",
-    padding: "0 4px",
-    minWidth: "36px",
-    width: "36px",
-    textAlign: "right",
+    padding: "0 8px",
+    minWidth: "48px",
+    fontFamily: "var(--font-geist-mono), monospace",
+    fontSize: "12px",
   },
   marker: {
-    padding: "0 4px",
-    width: "20px",
+    padding: "0 8px",
+    fontFamily: "var(--font-geist-mono), monospace",
+    fontSize: "13px",
+    fontWeight: "600",
   },
   diffContainer: {
-    borderRadius: "16px",
+    borderRadius: "12px",
     overflow: "hidden",
     width: "100%",
+    border: "1px solid oklch(28% 0 0)", // dark mode border
   },
   titleBlock: {
-    padding: "8px 12px",
+    padding: "10px 16px",
+    fontFamily: "var(--font-geist-sans), sans-serif",
+    fontSize: "12px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: "0.1em",
   },
   content: {
     width: "auto",
   },
   contentText: {
-    padding: "0 8px",
+    padding: "0 12px",
+    fontFamily: "var(--font-geist-mono), monospace",
+    fontSize: "13px",
+    lineHeight: "1.6",
   },
   line: {
-    padding: "0",
+    padding: "2px 0",
   },
   splitView: {
     width: "100%",
@@ -129,6 +189,7 @@ const ensureImageTagsQuoted = (input: string): string =>
   );
 
 export function VersionExplorer({ data }: VersionExplorerProps) {
+  const { resolvedTheme } = useTheme();
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(
     versions[0]?.version ?? null,
@@ -148,6 +209,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [reloadTarget, setReloadTarget] = useState<string | null>(null);
   const [processedReload, setProcessedReload] = useState(0);
   const [diffModalOpen, setDiffModalOpen] = useState(false);
+  const [diffModalFullscreen, setDiffModalFullscreen] = useState(false);
   const [diffMeta, setDiffMeta] = useState<{
     baseVersion: string;
     targetVersion: string;
@@ -492,82 +554,117 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 overflow-hidden px-4 py-6 md:px-6 lg:px-8">
-      <header className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-2">
-          <a
-            href="https://langgenius.github.io/dify-helm/#/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
-          >
-            <ArrowUpRight className="h-3 w-3" />
-            Dify Helm
-          </a>
-          <h1 className="text-3xl font-semibold text-foreground md:text-4xl">
-            Dify Helm Nightly Cheatsheet
-          </h1>
-          <p className="max-w-2xl text-sm text-muted md:text-base">
+    <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
+      <header className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex-1 space-y-1.5">
+          <div className="flex items-center gap-3">
+            <a
+              href="https://langgenius.github.io/dify-helm/#/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground"
+            >
+              <ArrowUpRight className="h-2.5 w-2.5" />
+              Dify Helm
+            </a>
+            <h1 className="text-xl font-semibold text-foreground md:text-2xl">
+              Dify Helm Nightly Cheatsheet
+            </h1>
+          </div>
+          <p className="max-w-2xl text-xs text-muted-foreground md:text-sm">
             Automatic daily snapshots of Helm chart default values and container image
             version references to support your helm upgrade process.
           </p>
         </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-white/12 bg-black px-4 py-3 text-sm text-muted/80">
-          <CalendarClock className="h-5 w-5 text-accent" />
-          <div className="flex flex-col leading-tight">
-            <span className="text-xs uppercase tracking-widest text-muted">
-              Last sync
-            </span>
-            <span className="text-sm text-foreground">
-              {data?.lastUpdated ? formatDate(data.lastUpdated) : "pending"}
-            </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+            <CalendarClock className="h-4 w-4 text-primary" />
+            <div className="flex flex-col leading-tight">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Last sync
+              </span>
+              <span className="text-xs font-medium text-foreground">
+                {data?.lastUpdated ? formatDate(data.lastUpdated) : "pending"}
+              </span>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
       <section className="grid flex-1 gap-6 overflow-hidden lg:grid-cols-[320px_1fr]">
-        <aside className="relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-3xl border border-white/12 bg-black p-4">
-          <div className="flex items-center justify-between text-xs uppercase tracking-widest text-muted">
+        <aside className="relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-3xl border border-border bg-card p-4">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-center justify-between text-xs uppercase tracking-widest text-muted-foreground"
+          >
             <span>Published Versions</span>
-            <span>{versions.length}</span>
-          </div>
+            <motion.span
+              key={versions.length}
+              initial={{ scale: 1.5, color: "rgb(0, 51, 255)" }}
+              animate={{ scale: 1, color: "inherit" }}
+              transition={{ duration: 0.3 }}
+            >
+              {versions.length}
+            </motion.span>
+          </motion.div>
           <div className="custom-scrollbar -mx-3 flex-1 overflow-y-auto px-1">
             {versions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/15 bg-black p-6 text-center text-sm text-muted">
-                <Info className="h-6 w-6 text-accent" />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-muted p-6 text-center text-sm text-muted-foreground"
+              >
+                <Info className="h-6 w-6 text-primary" />
                 <p>
                   No cached releases yet. Trigger the cron endpoint or wait for
                   the daily sync.
                 </p>
-              </div>
+              </motion.div>
             ) : (
               <ul className="flex flex-col">
-                {versions.map((version) => {
+                {versions.map((version, index) => {
                   const isActive = version.version === selectedVersion;
                   const showDiffIcon = !isActive && Boolean(selectedVersion);
                   return (
-                    <li key={version.version} className="mb-2 last:mb-0">
+                    <motion.li
+                      key={version.version}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        duration: 0.3,
+                        delay: index * 0.05,
+                        ease: "easeOut",
+                      }}
+                      className="mb-2 last:mb-0"
+                    >
                       <div className="relative">
-                        <button
+                        <motion.button
                           type="button"
                           onClick={() => setSelectedVersion(version.version)}
-                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                             isActive
-                              ? "border-[#03f] bg-[#03f] text-white"
-                              : "border-white/12 bg-transparent text-muted hover:border-white/40 hover:bg-white/5 hover:text-foreground"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-transparent text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-foreground"
                           }`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <span
                               className={`text-base font-semibold tracking-wide ${
-                                isActive ? "text-white" : "text-foreground"
+                                isActive ? "text-primary-foreground" : "text-foreground"
                               }`}
                             >
                               v{version.version}
                             </span>
                             <span
                               className={`text-[10px] font-mono uppercase tracking-widest ${
-                                isActive ? "text-white/90" : "text-muted"
+                                isActive ? "text-primary-foreground/90" : "text-muted-foreground"
                               }`}
                             >
                               sha256:{version.values.hash.slice(0, 7)}
@@ -575,15 +672,15 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           </div>
                           <div
                             className={`flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${
-                              isActive ? "text-white/90" : "text-muted"
+                              isActive ? "text-primary-foreground/90" : "text-muted-foreground"
                             }`}
                           >
                             {version.appVersion && (
                               <span
                                 className={`rounded-full border px-2 py-0.5 ${
                                   isActive
-                                    ? "border-white/30 bg-white/10 text-white"
-                                    : "border-white/15 bg-white/5 text-muted"
+                                    ? "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground"
+                                    : "border-border bg-muted text-muted-foreground"
                                 }`}
                               >
                                 App {version.appVersion}
@@ -593,21 +690,27 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           {version.createdAt && (
                             <span
                               className={`mt-1 text-[10px] uppercase tracking-[0.2em] ${
-                                isActive ? "text-white/80" : "text-muted/80"
+                                isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
                               }`}
                             >
                               {formatDate(version.createdAt)}
                             </span>
                           )}
-                        </button>
+                        </motion.button>
                         {showDiffIcon ? (
-                          <button
+                          <motion.button
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xs text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card/70 text-xs text-muted-foreground transition-colors hover:border-accent hover:bg-accent/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -620,10 +723,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                             }
                           >
                             <Diff className="h-4 w-4" />
-                          </button>
+                          </motion.button>
                         ) : null}
                       </div>
-                    </li>
+                    </motion.li>
                   );
                 })}
               </ul>
@@ -633,7 +736,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
         <article className="flex h-full flex-col gap-6 overflow-hidden">
           {error ? (
-            <div className="flex flex-col gap-4 rounded-2xl border border-red-500/40 bg-black p-6 text-sm text-red-200">
+            <div className="flex flex-col gap-4 rounded-2xl border border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive-foreground">
               <div className="flex items-center gap-2 font-semibold">
                 <Info className="h-4 w-4" />
                 {error}
@@ -641,7 +744,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               <button
                 type="button"
                 onClick={handleRetry}
-                className="inline-flex w-fit items-center gap-2 rounded-full border border-red-400/60 bg-transparent px-4 py-1 text-xs uppercase tracking-[0.3em] text-red-200 transition hover:border-red-300 hover:bg-red-500/10"
+                className="inline-flex w-fit items-center gap-2 rounded-full border border-destructive bg-transparent px-4 py-1 text-xs uppercase tracking-[0.3em] text-destructive-foreground transition hover:border-destructive/80 hover:bg-destructive/20"
               >
                 <RefreshCw className="h-3 w-3" />
                 Retry
@@ -651,7 +754,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
             <div className="flex items-center justify-center gap-4">
-              <div className="flex w-full justify-center rounded-full border border-white/12 bg-black/60 p-1">
+              <div className="relative flex w-full justify-center rounded-full border border-border bg-muted p-1">
                 {artifactTabs.map((tab) => {
                   const isActive = tab.id === activeTab.id;
                   return (
@@ -659,13 +762,24 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveArtifact(tab.id)}
-                      className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition ${
+                      className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${
                         isActive
-                          ? "border border-white bg-white text-black"
-                          : "border border-transparent text-muted hover:border-white/30 hover:text-foreground"
+                          ? "text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      {tab.label}
+                      {isActive && (
+                        <motion.div
+                          layoutId="artifact-tab-indicator"
+                          className="absolute inset-0 rounded-full border border-primary bg-primary"
+                          transition={{
+                            type: "spring",
+                            stiffness: 500,
+                            damping: 35,
+                          }}
+                        />
+                      )}
+                      <span className="relative z-10">{tab.label}</span>
                     </button>
                   );
                 })}
@@ -673,54 +787,95 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             </div>
             <div className="relative flex-1 overflow-hidden">
               {loading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/70 backdrop-blur">
-                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                </div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur"
+                >
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </motion.div>
               )}
-              {activeTab.type === "code" ? (
-                <CodeBlock
-                  label={activeTab.label}
-                  value={activeTab.content}
-                  language={activeTab.language}
-                  version={selectedVersion ?? undefined}
-                  className="mx-auto h-full w-full max-w-4xl"
-                />
-              ) : (
-                <ImageValidationTable
-                  version={selectedVersion ?? undefined}
-                  data={validationData}
-                  error={validationError}
-                  loading={loading}
-                  hasAsset={hasValidationAsset}
-                  onRetry={handleRetry}
-                />
-              )}
+              <motion.div
+                key={activeTab.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="h-full"
+              >
+                {activeTab.type === "code" ? (
+                  <CodeBlock
+                    label={activeTab.label}
+                    value={activeTab.content}
+                    language={activeTab.language}
+                    version={selectedVersion ?? undefined}
+                    className="mx-auto h-full w-full max-w-4xl"
+                  />
+                ) : (
+                  <ImageValidationTable
+                    version={selectedVersion ?? undefined}
+                    data={validationData}
+                    error={validationError}
+                    loading={loading}
+                    hasAsset={hasValidationAsset}
+                    onRetry={handleRetry}
+                  />
+                )}
+              </motion.div>
             </div>
           </div>
         </article>
       </section>
       {diffModalOpen && diffMeta ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 px-4 py-8 backdrop-blur-sm"
           onClick={closeDiffModal}
           role="dialog"
           aria-modal="true"
           aria-labelledby="diff-dialog-title"
         >
-          <div
-            className="relative flex w-full max-w-6xl flex-col gap-5 rounded-3xl border border-white/12 bg-[#080808] p-6 shadow-2xl"
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className={`relative flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-2xl transition-all ${
+              diffModalFullscreen
+                ? "h-[95vh] w-[95vw] max-w-none"
+                : "w-full max-w-6xl"
+            }`}
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={closeDiffModal}
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/80 transition hover:border-white/40 hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              aria-label="Close comparison dialog"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="absolute right-4 top-4 flex items-center gap-2">
+              <motion.button
+                type="button"
+                onClick={() => setDiffModalFullscreen(!diffModalFullscreen)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:border-accent hover:bg-accent/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={diffModalFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                title={diffModalFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              >
+                {diffModalFullscreen ? (
+                  <Minimize2 className="h-4 w-4" />
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
+              </motion.button>
+              <motion.button
+                type="button"
+                onClick={closeDiffModal}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:border-accent hover:bg-accent/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Close comparison dialog"
+              >
+                <X className="h-4 w-4" />
+              </motion.button>
+            </div>
             <header className="flex flex-col gap-2 pr-12">
-              <span className="text-xs uppercase tracking-[0.3em] text-muted">
+              <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
                 Comparing cached artifacts
               </span>
               <h2
@@ -729,12 +884,12 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               >
                 v{diffMeta.targetVersion} ↔ v{diffMeta.baseVersion}
               </h2>
-              <p className="text-sm text-muted">
+              <p className="text-sm text-muted-foreground">
                 Review differences between releases using the same artifact tabs.
               </p>
             </header>
             <div className="flex items-center justify-center gap-4">
-              <div className="flex w-full justify-center rounded-full border border-white/12 bg-black/60 p-1">
+              <div className="relative flex w-full justify-center rounded-full border border-border bg-muted p-1">
                 {codeTabs.map((tab) => {
                   const isActive = tab.id === diffActiveTabId;
                   return (
@@ -742,43 +897,66 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveArtifact(tab.id)}
-                      className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition ${
+                      className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${
                         isActive
-                          ? "border border-white bg-white text-black"
-                          : "border border-transparent text-muted hover:border-white/30 hover:text-foreground"
+                          ? "text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      {tab.label}
+                      {isActive && (
+                        <motion.div
+                          layoutId="diff-tab-indicator"
+                          className="absolute inset-0 rounded-full border border-primary bg-primary"
+                          transition={{
+                            type: "spring",
+                            stiffness: 500,
+                            damping: 35,
+                          }}
+                        />
+                      )}
+                      <span className="relative z-10">{tab.label}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
             {diffError ? (
-              <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
                 {diffError}
               </div>
             ) : null}
-            <div className="relative flex max-h-[65vh] flex-1 flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/80">
+            <div
+              className={`relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-muted ${
+                diffModalFullscreen ? "max-h-[calc(95vh-200px)]" : "max-h-[65vh]"
+              }`}
+            >
               {diffLoading ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/75 backdrop-blur">
-                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                </div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="absolute inset-0 z-10 flex items-center justify-center bg-background/75 backdrop-blur"
+                >
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </motion.div>
               ) : null}
-              <div className="custom-scrollbar max-h-[65vh] flex-1 overflow-auto p-4">
+              <div
+                className={`custom-scrollbar flex-1 overflow-auto rounded-xl bg-muted p-4 ${
+                  diffModalFullscreen ? "max-h-[calc(95vh-200px)]" : "max-h-[65vh]"
+                }`}
+              >
                 <ReactDiffViewer
                   oldValue={diffActiveContent.oldValue}
                   newValue={diffActiveContent.newValue}
                   splitView
                   styles={diffViewerStyles}
-                  useDarkTheme
+                  useDarkTheme={resolvedTheme === "dark"}
                   showDiffOnly={false}
                   leftTitle={`v${diffMeta.targetVersion}`}
                   rightTitle={`v${diffMeta.baseVersion}`}
                 />
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       ) : null}
     </div>
