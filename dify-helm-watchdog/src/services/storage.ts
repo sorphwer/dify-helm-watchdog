@@ -4,6 +4,16 @@ import { BlobNotFoundError, head, put } from "@vercel/blob";
 import type { HeadResult, Storage, StoredAsset } from "../lib/types";
 import { LOCAL_CACHE_DIR_RELATIVE } from "../constants/helm";
 
+// Custom error for missing blob token
+class MissingBlobTokenError extends Error {
+  constructor() {
+    super(
+      "BLOB_READ_WRITE_TOKEN or VERCEL_BLOB_RW_TOKEN environment variable is required for local development",
+    );
+    this.name = "MissingBlobTokenError";
+  }
+}
+
 // Helper function to get local asset path - always uses absolute paths
 const getLocalAssetPath = (assetPath: string): string => {
   // Remove 'helm-watchdog/' prefix if present to avoid path duplication
@@ -36,7 +46,6 @@ export class BlobStorageService implements Storage {
         pathname: metadata.pathname,
         size: metadata.size,
         uploadedAt: metadata.uploadedAt,
-        downloadedAt: metadata.downloadedAt,
         downloadUrl: metadata.url,
       };
     } catch (error) {

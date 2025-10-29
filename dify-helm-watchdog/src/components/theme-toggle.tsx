@@ -31,9 +31,7 @@ export function ThemeToggle() {
     const isDark = resolvedTheme === "dark" || theme === "dark"
     const newTheme = isDark ? "light" : "dark"
 
-    // @ts-expect-error - View Transition API is not yet in TypeScript DOM types
     if (document.startViewTransition) {
-      // @ts-expect-error - View Transition API is not yet in TypeScript DOM types
       document.startViewTransition(() => {
         setTheme(newTheme)
       })
