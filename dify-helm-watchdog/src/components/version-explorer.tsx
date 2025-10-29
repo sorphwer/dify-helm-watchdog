@@ -43,10 +43,12 @@ const diffViewerStyles: ReactDiffViewerStylesOverride = {
     minWidth: "36px",
     width: "36px",
     textAlign: "right",
+    fontSize: "10px",
   },
   marker: {
     padding: "0 4px",
     width: "20px",
+    fontSize: "10px",
   },
   diffContainer: {
     borderRadius: "16px",
@@ -58,9 +60,12 @@ const diffViewerStyles: ReactDiffViewerStylesOverride = {
   },
   content: {
     width: "auto",
+    fontSize: "11px",
   },
   contentText: {
     padding: "0 8px",
+    fontSize: "11px",
+    lineHeight: "1.4",
   },
   line: {
     padding: "0",
@@ -492,7 +497,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 overflow-hidden px-4 py-6 md:px-6 lg:px-8">
+    <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-6 overflow-hidden px-4 py-6 md:px-6 lg:px-8">
       <header className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-2">
           <a
@@ -683,7 +688,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                   value={activeTab.content}
                   language={activeTab.language}
                   version={selectedVersion ?? undefined}
-                  className="mx-auto h-full w-full max-w-4xl"
+                  className="h-full w-full"
                 />
               ) : (
                 <ImageValidationTable
@@ -708,7 +713,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           aria-labelledby="diff-dialog-title"
         >
           <div
-            className="relative flex w-full max-w-6xl flex-col gap-5 rounded-3xl border border-white/12 bg-[#080808] p-6 shadow-2xl"
+            className="relative flex w-full max-w-[calc(100%-2rem)] flex-col gap-5 rounded-3xl border border-white/12 bg-[#080808] p-6 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <button
