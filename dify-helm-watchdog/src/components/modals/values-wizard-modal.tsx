@@ -31,7 +31,7 @@ interface TagChange {
   status: "updated" | "unchanged" | "missing";
 }
 
-interface ValuesWizardProps {
+interface ValuesWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedVersion: string | null;
@@ -118,12 +118,12 @@ const applyImageTagUpdates = (
   };
 };
 
-export function ValuesWizard({
+export default function ValuesWizardModal({
   isOpen,
   onClose,
   selectedVersion,
   imageTagMap,
-}: ValuesWizardProps) {
+}: ValuesWizardModalProps) {
   const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedValuesText, setUploadedValuesText] = useState<string>("");
@@ -245,7 +245,7 @@ export function ValuesWizard({
           The file never leaves your browser and is processed locally.
         </p>
         {!imageMetadataReady ? (
-          <div className="rounded-xl border border-warning/50 bg-warning/10 px-4 py-3 text-xs text-warning-foreground">
+          <div className="rounded-xl border border-warning bg-warning/15 px-4 py-3 text-xs font-medium text-warning">
             Image tag metadata for this release is still syncing. Once the artifacts are ready you
             can rerun this helper.
           </div>
@@ -300,14 +300,14 @@ export function ValuesWizard({
 
       wizardStepBody = (
         <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
-            <span className="rounded-full border border-success/40 bg-success/15 px-3 py-1 text-success-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.3em]">
+            <span className="rounded-full border border-success bg-success/20 px-3 py-1 font-semibold text-success">
               Updated {summary.updated}
             </span>
-            <span className="rounded-full border border-border bg-muted px-3 py-1">
+            <span className="rounded-full border border-border bg-muted px-3 py-1 font-semibold text-foreground">
               Already current {summary.unchanged}
             </span>
-            <span className="rounded-full border border-warning/50 bg-warning/15 px-3 py-1 text-warning-foreground">
+            <span className="rounded-full border border-warning bg-warning/20 px-3 py-1 font-semibold text-warning">
               Missing {summary.missing}
             </span>
           </div>
@@ -327,10 +327,10 @@ export function ValuesWizard({
                       ? "Already current"
                       : "Not found";
                 const badgeClasses = isMissing
-                  ? "border border-warning/60 bg-warning/15 text-warning-foreground"
+                  ? "border border-warning bg-warning/20 text-warning font-semibold"
                   : isUpdated
-                    ? "border border-success/50 bg-success/15 text-success-foreground"
-                    : "border border-border bg-muted text-muted-foreground";
+                    ? "border border-success bg-success/20 text-success font-semibold"
+                    : "border border-border bg-muted text-foreground font-semibold";
                 const StatusIcon = isMissing ? AlertTriangle : CheckCircle2;
 
                 return (
@@ -363,7 +363,7 @@ export function ValuesWizard({
                       </span>
                     </div>
                     {isMissing ? (
-                      <p className="text-xs text-warning-foreground">
+                      <p className="text-xs font-medium text-warning">
                         We could not find {change.path} in your overrides. Update it manually if
                         needed.
                       </p>
@@ -485,7 +485,7 @@ export function ValuesWizard({
           </div>
           {wizardStepBody}
           {wizardError ? (
-            <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
+            <div className="rounded-2xl border border-destructive bg-destructive/15 px-4 py-3 text-sm font-medium text-destructive">
               {wizardError}
             </div>
           ) : null}

@@ -8,14 +8,10 @@ import {
   FileUp,
   Info,
   Loader2,
-  Maximize2,
-  Minimize2,
   RefreshCw,
-  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
-import ReactDiffViewer from "react-diff-viewer";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
 import YAML from "yaml";
 import type {
@@ -26,7 +22,8 @@ import type {
 import { CodeBlock } from "@/components/ui/code-block";
 import { ImageValidationTable } from "@/components/image-validation-table";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ValuesWizard } from "@/components/values-wizard";
+import ValuesWizardModal from "@/components/modals/values-wizard-modal";
+import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
 
 // Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
@@ -885,140 +882,26 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           </div>
         </article>
       </section>
-      {diffModalOpen && diffMeta ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 px-4 py-8 backdrop-blur-sm"
-          onClick={closeDiffModal}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="diff-dialog-title"
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className={`relative flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-2xl transition-all ${
-              diffModalFullscreen
-                ? "h-[95vh] w-[95vw] max-w-none"
-                : "w-full max-w-6xl"
-            }`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="absolute right-4 top-4 flex items-center gap-2">
-              <motion.button
-                type="button"
-                onClick={() => setDiffModalFullscreen(!diffModalFullscreen)}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:border-accent hover:bg-accent/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={diffModalFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                title={diffModalFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              >
-                {diffModalFullscreen ? (
-                  <Minimize2 className="h-4 w-4" />
-                ) : (
-                  <Maximize2 className="h-4 w-4" />
-                )}
-              </motion.button>
-              <motion.button
-                type="button"
-                onClick={closeDiffModal}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:border-accent hover:bg-accent/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Close comparison dialog"
-              >
-                <X className="h-4 w-4" />
-              </motion.button>
-            </div>
-            <header className="flex flex-col gap-2 pr-12">
-              <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                Comparing cached artifacts
-              </span>
-              <h2
-                id="diff-dialog-title"
-                className="text-2xl font-semibold text-foreground"
-              >
-                v{diffMeta.targetVersion} ↔ v{diffMeta.baseVersion}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Review differences between releases using the same artifact tabs.
-              </p>
-            </header>
-            <div className="flex items-center justify-center gap-4">
-              <div className="relative flex w-full justify-center rounded-full border border-border bg-muted p-1">
-                {codeTabs.map((tab) => {
-                  const isActive = tab.id === diffActiveTabId;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveArtifact(tab.id)}
-                      className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${
-                        isActive
-                          ? "text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {isActive && (
-                        <motion.div
-                          layoutId="diff-tab-indicator"
-                          className="absolute inset-0 rounded-full border border-primary bg-primary"
-                          transition={{
-                            type: "spring",
-                            stiffness: 500,
-                            damping: 35,
-                          }}
-                        />
-                      )}
-                      <span className="relative z-10">{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {diffError ? (
-              <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
-                {diffError}
-              </div>
-            ) : null}
-            <div
-              className={`relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-muted ${
-                diffModalFullscreen ? "max-h-[calc(95vh-200px)]" : "max-h-[65vh]"
-              }`}
-            >
-              {diffLoading ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="absolute inset-0 z-10 flex items-center justify-center bg-background/75 backdrop-blur"
-                >
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </motion.div>
-              ) : null}
-              <div
-                className={`custom-scrollbar flex-1 overflow-auto rounded-xl bg-muted p-4 ${
-                  diffModalFullscreen ? "max-h-[calc(95vh-200px)]" : "max-h-[65vh]"
-                }`}
-              >
-                <ReactDiffViewer
-                  oldValue={diffActiveContent.oldValue}
-                  newValue={diffActiveContent.newValue}
-                  splitView
-                  styles={diffViewerStyles}
-                  useDarkTheme={resolvedTheme === "dark"}
-                  showDiffOnly={false}
-                  leftTitle={`v${diffMeta.targetVersion}`}
-                  rightTitle={`v${diffMeta.baseVersion}`}
-                />
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      ) : null}
+      <DiffComparisonModal
+        isOpen={diffModalOpen && Boolean(diffMeta)}
+        onClose={closeDiffModal}
+        isFullscreen={diffModalFullscreen}
+        onToggleFullscreen={() => setDiffModalFullscreen(!diffModalFullscreen)}
+        targetVersion={diffMeta?.targetVersion ?? ""}
+        baseVersion={diffMeta?.baseVersion ?? ""}
+        activeTabId={diffActiveTabId}
+        tabs={codeTabs}
+        onTabChange={(tabId) =>
+          setActiveArtifact(tabId as "values" | "images" | "validation")
+        }
+        diffContent={diffActiveContent}
+        diffViewerStyles={diffViewerStyles}
+        theme={resolvedTheme}
+        isLoading={diffLoading}
+        error={diffError}
+      />
 
-      <ValuesWizard
+      <ValuesWizardModal
         isOpen={wizardOpen}
         onClose={handleCloseWizard}
         selectedVersion={selectedVersion}
