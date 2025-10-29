@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChangeEvent, MouseEvent } from "react";
+import type { ChangeEvent, MouseEvent, ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -422,7 +422,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     imageTagMap && Object.keys(imageTagMap).length > 0,
   );
 
-  let wizardStepBody: JSX.Element;
+  let wizardStepBody: ReactElement;
   if (wizardStep === 1) {
     wizardStepBody = (
       <div className="flex flex-col gap-4 rounded-2xl border border-white/12 bg-black/40 p-5">
