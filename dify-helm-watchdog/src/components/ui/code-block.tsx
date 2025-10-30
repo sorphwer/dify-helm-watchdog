@@ -109,7 +109,7 @@ export function CodeBlock({
               background: "transparent",
             }}
           >
-            <code className="font-mono text-[13px]" style={{ background: "transparent", backgroundColor: "transparent" }}>
+            <code className="font-mono text-[13px]">
               {tokens.map((line, lineIndex) => (
                 <div key={lineIndex} {...getLineProps({ line })} style={{ background: "transparent" }}>
                   {line.map((token, tokenIndex) => (
