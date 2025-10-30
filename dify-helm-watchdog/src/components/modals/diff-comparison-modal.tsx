@@ -73,7 +73,7 @@ export default function DiffComparisonModal({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
-        className="relative flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-2xl transition-all h-[95vh] w-[95vw] max-w-none"
+        className="relative flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-2xl transition-all max-h-[95vh] max-w-[95vw] w-full"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Header buttons */}
