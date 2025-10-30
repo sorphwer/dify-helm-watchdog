@@ -796,7 +796,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                 {artifactTabs.map((tab) => {
                   const isActive = tab.id === activeTab.id;
                   return (
-                    <button
+                    <motion.button
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveArtifact(tab.id)}
@@ -805,7 +805,23 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           ? "text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
+                      whileHover={
+                        !isActive
+                          ? {
+                              scale: 1.02,
+                            }
+                          : {}
+                      }
+                      whileTap={{
+                        scale: 0.98,
+                      }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 30,
+                      }}
                     >
+                      {/* 激活状态的背景指示器 */}
                       {isActive && (
                         <motion.div
                           layoutId="artifact-tab-indicator"
@@ -817,8 +833,19 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           }}
                         />
                       )}
-                      <span className="relative z-10">{tab.label}</span>
-                    </button>
+                      {/* Hover 状态的微妙高光效果 */}
+                      {!isActive && (
+                        <motion.div
+                          className="pointer-events-none absolute inset-0 rounded-full bg-accent/30"
+                          initial={{ opacity: 0 }}
+                          whileHover={{ opacity: 1 }}
+                          transition={{
+                            duration: 0.2,
+                          }}
+                        />
+                      )}
+                      <span className="pointer-events-none relative z-10">{tab.label}</span>
+                    </motion.button>
                   );
                 })}
               </div>
