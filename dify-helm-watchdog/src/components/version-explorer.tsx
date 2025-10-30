@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   CalendarClock,
-  Diff,
-  FileUp,
+  FileDiff,
   Info,
   Loader2,
+  MapPinned,
   RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -656,6 +656,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                 {versions.map((version, index) => {
                   const isActive = version.version === selectedVersion;
                   const showDiffIcon = !isActive && Boolean(selectedVersion);
+                  const showWizardButton = isActive;
                   return (
                     <motion.li
                       key={version.version}
@@ -716,7 +717,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           </div>
                           {version.createdAt && (
                             <span
-                              className={`mt-1 text-[10px] uppercase tracking-[0.2em] ${
+                              className={`mt-1 text-[9px] uppercase tracking-[0.05em] ${
                                 isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
                               }`}
                             >
@@ -724,6 +725,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                             </span>
                           )}
                         </motion.button>
+                        {showWizardButton ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenWizard();
+                            }}
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/40 bg-primary-foreground/20 px-3 py-1 text-[10px] font-semibold text-primary-foreground transition hover:border-primary-foreground/60 hover:bg-primary-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/60"
+                            aria-label="Open tag update wizard"
+                            title="Open tag update wizard"
+                          >
+                            <MapPinned className="h-3.5 w-3.5" />
+                            update tag to this
+                          </button>
+                        ) : null}
                         {showDiffIcon ? (
                           <button
                             type="button"
@@ -731,7 +747,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xs text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] font-semibold text-foreground transition hover:border-primary/50 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -743,21 +759,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                                 : "Compare versions"
                             }
                           >
-                            <Diff className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                        {isActive ? (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleOpenWizard();
-                            }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xs text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                            aria-label="Update values.yaml tags"
-                            title="Sync image tags to your values.yaml"
-                          >
-                            <FileUp className="h-4 w-4" />
+                            <FileDiff className="h-3.5 w-3.5" />
+                            diff
                           </button>
                         ) : null}
                       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Loader2, X } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactDiffViewer from "react-diff-viewer";
@@ -37,6 +38,24 @@ export default function DiffComparisonModal({
   isLoading,
   error,
 }: DiffComparisonModalProps) {
+  // ESC key handler
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) {
     return null;
   }

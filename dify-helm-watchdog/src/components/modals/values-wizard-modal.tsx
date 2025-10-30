@@ -156,6 +156,24 @@ export default function ValuesWizardModal({
     }
   }, [isOpen, resetWizardState]);
 
+  // ESC key handler
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, onClose]);
+
   const handleFileInputChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const [file] = event.target.files ?? [];
