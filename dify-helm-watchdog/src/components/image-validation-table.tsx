@@ -72,7 +72,8 @@ const VariantCell = ({ record, name }: { record: ImageValidationRecord; name: "o
   // even if -amd64/-arm64 specific tags don't exist
   const originalVariant = record.variants.find((v) => v.name === "original");
   const isMultiArchAvailable = originalVariant?.status === "found" && name !== "original";
-  const effectiveStatus = isMultiArchAvailable && variant.status === "missing" ? "found" : variant.status;
+  const isOverriddenByMultiArch = isMultiArchAvailable && variant.status === "missing";
+  const effectiveStatus = isOverriddenByMultiArch ? "found" : variant.status;
 
   return (
     <td className="px-4 py-3 align-top">
