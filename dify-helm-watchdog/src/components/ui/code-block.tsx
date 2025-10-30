@@ -111,7 +111,7 @@ export function CodeBlock({
           >
             <code className="font-mono text-[13px]">
               {tokens.map((line, lineIndex) => (
-                <div key={lineIndex} {...getLineProps({ line })} style={{ background: "transparent" }}>
+                <div key={lineIndex} {...getLineProps({ line })}>
                   {line.map((token, tokenIndex) => (
                     <span
                       key={tokenIndex}
