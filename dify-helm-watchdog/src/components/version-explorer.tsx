@@ -1,23 +1,19 @@
 "use client";
 
-import type { ChangeEvent, MouseEvent, ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle,
-  ArrowRight,
   ArrowUpRight,
   CalendarClock,
-  CheckCircle2,
   FileDiff,
-  FileUp,
   Info,
   Loader2,
   MapPinned,
   RefreshCw,
-  X,
 } from "lucide-react";
-import ReactDiffViewer from "react-diff-viewer";
+import { motion } from "framer-motion";
+import { useTheme } from "next-themes";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
+import YAML from "yaml";
 import type {
   CachePayload,
   ImageValidationPayload,
@@ -25,23 +21,66 @@ import type {
 } from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ImageValidationTable } from "@/components/image-validation-table";
-import YAML from "yaml";
+import { ThemeToggle } from "@/components/theme-toggle";
+import ValuesWizardModal from "@/components/modals/values-wizard-modal";
+import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
 
+// Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
   variables: {
+    light: {
+      diffViewerBackground: "oklch(99% 0 0)", // card background
+      diffViewerColor: "oklch(15% 0 0)", // foreground
+      // 绿色 - 新增内容
+      addedBackground: "rgba(34, 197, 94, 0.08)", // 淡绿色背景
+      addedColor: "oklch(25% 0 0)", // 深色文字
+      addedGutterBackground: "rgba(34, 197, 94, 0.12)",
+      wordAddedBackground: "rgba(34, 197, 94, 0.2)", // 高亮绿色
+      // 红色 - 删除内容
+      removedBackground: "rgba(239, 68, 68, 0.08)", // 淡红色背景
+      removedColor: "oklch(25% 0 0)", // 深色文字
+      removedGutterBackground: "rgba(239, 68, 68, 0.12)",
+      wordRemovedBackground: "rgba(239, 68, 68, 0.2)", // 高亮红色
+      // 其他
+      gutterBackground: "oklch(97% 0 0)",
+      gutterBackgroundDark: "oklch(95% 0 0)",
+      gutterColor: "oklch(50% 0 0)",
+      highlightBackground: "rgba(0, 51, 255, 0.08)", // brand blue
+      highlightGutterBackground: "rgba(0, 51, 255, 0.12)",
+      codeFoldGutterBackground: "oklch(95% 0 0)",
+      codeFoldBackground: "oklch(97% 0 0)",
+      emptyLineBackground: "oklch(98% 0 0)",
+      codeFoldContentColor: "oklch(50% 0 0)",
+      diffViewerTitleBackground: "oklch(97% 0 0)",
+      diffViewerTitleColor: "oklch(25% 0 0)",
+      diffViewerTitleBorderColor: "oklch(86% 0 0)",
+    },
     dark: {
-      diffViewerBackground: "transparent",
-      diffViewerColor: "rgba(235,235,245,0.85)",
-      addedBackground: "rgba(34,197,94,0.18)",
-      addedColor: "rgba(74,222,128,0.95)",
-      removedBackground: "rgba(248,113,113,0.2)",
-      removedColor: "rgba(252,165,165,0.95)",
-      wordAddedBackground: "rgba(34,197,94,0.35)",
-      wordRemovedBackground: "rgba(248,113,113,0.35)",
-      gutterBackground: "rgba(15,15,15,0.7)",
-      gutterBackgroundDark: "rgba(15,15,15,0.7)",
-      highlightBackground: "rgba(59,130,246,0.2)",
-      highlightGutterBackground: "rgba(59,130,246,0.2)",
+      diffViewerBackground: "oklch(18% 0 0)", // card background
+      diffViewerColor: "oklch(95% 0 0)", // foreground
+      // 绿色 - 新增内容
+      addedBackground: "rgba(34, 197, 94, 0.15)", // 淡绿色背景
+      addedColor: "oklch(95% 0 0)", // 亮色文字
+      addedGutterBackground: "rgba(34, 197, 94, 0.2)",
+      wordAddedBackground: "rgba(34, 197, 94, 0.3)", // 高亮绿色
+      // 红色 - 删除内容
+      removedBackground: "rgba(239, 68, 68, 0.15)", // 淡红色背景
+      removedColor: "oklch(95% 0 0)", // 亮色文字
+      removedGutterBackground: "rgba(239, 68, 68, 0.2)",
+      wordRemovedBackground: "rgba(239, 68, 68, 0.3)", // 高亮红色
+      // 其他
+      gutterBackground: "oklch(16% 0 0)",
+      gutterBackgroundDark: "oklch(14% 0 0)",
+      gutterColor: "oklch(65% 0 0)",
+      highlightBackground: "rgba(0, 51, 255, 0.15)", // brand blue
+      highlightGutterBackground: "rgba(0, 51, 255, 0.2)",
+      codeFoldGutterBackground: "oklch(20% 0 0)",
+      codeFoldBackground: "oklch(18% 0 0)",
+      emptyLineBackground: "oklch(17% 0 0)",
+      codeFoldContentColor: "oklch(65% 0 0)",
+      diffViewerTitleBackground: "oklch(16% 0 0)",
+      diffViewerTitleColor: "oklch(95% 0 0)",
+      diffViewerTitleBorderColor: "oklch(28% 0 0)",
     },
   },
   gutter: {
@@ -67,7 +106,6 @@ const diffViewerStyles: ReactDiffViewerStylesOverride = {
   },
   content: {
     width: "auto",
-    fontSize: "11px",
   },
   contentText: {
     padding: "0 8px",
@@ -140,101 +178,17 @@ const ensureImageTagsQuoted = (input: string): string =>
     },
   );
 
+// Helper for parsing image metadata
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const normalizeScalar = (value: unknown): string | null => {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return null;
-};
-
-type WizardStepId = 1 | 2 | 3;
 
 interface ImageTagEntry {
   repository?: string;
   tag?: string;
 }
 
-interface TagChange {
-  key: string;
-  path: string;
-  repository?: string;
-  oldTag: string | null;
-  newTag: string;
-  status: "updated" | "unchanged" | "missing";
-}
-
-const WIZARD_STEPS: Array<{ id: WizardStepId; label: string }> = [
-  { id: 1, label: "Upload file" },
-  { id: 2, label: "Review tags" },
-  { id: 3, label: "Copy result" },
-];
-
-const applyImageTagUpdates = (
-  rawYaml: string,
-  imageMap: Record<string, ImageTagEntry>,
-): { changes: TagChange[]; updatedYaml: string } => {
-  const doc = YAML.parseDocument(rawYaml);
-  if (doc.errors.length > 0) {
-    throw doc.errors[0];
-  }
-
-  const changes: TagChange[] = [];
-
-  for (const [key, entry] of Object.entries(imageMap)) {
-    if (!isRecord(entry)) {
-      continue;
-    }
-
-    const nextTag = normalizeScalar(entry.tag);
-    if (!nextTag) {
-      continue;
-    }
-
-    const segments = key.split(".");
-    const imagePath = [...segments, "image", "tag"];
-    const directPath = [...segments, "tag"];
-
-    let status: TagChange["status"] = "missing";
-    let previousValue: string | null = null;
-    let usedPath: string[] | null = null;
-
-    if (doc.hasIn(imagePath)) {
-      const current = doc.getIn(imagePath);
-      previousValue = normalizeScalar(current);
-      doc.setIn(imagePath, nextTag);
-      status = previousValue === nextTag ? "unchanged" : "updated";
-      usedPath = imagePath;
-    } else if (doc.hasIn(directPath)) {
-      const current = doc.getIn(directPath);
-      previousValue = normalizeScalar(current);
-      doc.setIn(directPath, nextTag);
-      status = previousValue === nextTag ? "unchanged" : "updated";
-      usedPath = directPath;
-    }
-
-    changes.push({
-      key,
-      path: (usedPath ?? imagePath).join("."),
-      repository: normalizeScalar(entry.repository) ?? undefined,
-      oldTag: previousValue,
-      newTag: nextTag,
-      status,
-    });
-  }
-
-  return {
-    changes,
-    updatedYaml: doc.toString(),
-  };
-};
-
 export function VersionExplorer({ data }: VersionExplorerProps) {
+  const { resolvedTheme } = useTheme();
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(
     versions[0]?.version ?? null,
@@ -270,15 +224,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [diffError, setDiffError] = useState<string | null>(null);
   const diffRequestRef = useRef(0);
 
+  // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-  const [uploadedValuesText, setUploadedValuesText] = useState<string>("");
-  const [wizardError, setWizardError] = useState<string | null>(null);
-  const [tagChanges, setTagChanges] = useState<TagChange[]>([]);
-  const [updatedValuesYaml, setUpdatedValuesYaml] = useState<string>("");
-  const [wizardProcessing, setWizardProcessing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
@@ -304,295 +251,14 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     }
   }, [imagesContent]);
 
-  const resetWizardState = useCallback(() => {
-    setWizardStep(1);
-    setUploadedFileName(null);
-    setUploadedValuesText("");
-    setTagChanges([]);
-    setUpdatedValuesYaml("");
-    setWizardError(null);
-    setWizardProcessing(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  }, []);
-
-  const closeWizard = useCallback(() => {
-    setWizardOpen(false);
-    resetWizardState();
-  }, [resetWizardState]);
-
-  useEffect(() => {
-    resetWizardState();
-    setWizardOpen(false);
-  }, [selectedVersion, resetWizardState]);
-
+  // Wizard handlers
   const handleOpenWizard = useCallback(() => {
-    resetWizardState();
-    if (!imageTagMap || Object.keys(imageTagMap).length === 0) {
-      setWizardError(
-        "Image metadata for this release has not loaded yet. Once the artifacts are ready you can try again.",
-      );
-    }
     setWizardOpen(true);
-  }, [imageTagMap, resetWizardState]);
-
-  const handleFileInputChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const [file] = event.target.files ?? [];
-      if (!file) {
-        return;
-      }
-
-      setWizardProcessing(true);
-      setWizardError(null);
-
-      try {
-        if (!imageTagMap || Object.keys(imageTagMap).length === 0) {
-          throw new Error(
-            "Image metadata has not loaded yet for this release. Wait for the artifacts to finish syncing and try again.",
-          );
-        }
-
-        const text = await file.text();
-        const { changes, updatedYaml } = applyImageTagUpdates(text, imageTagMap);
-
-        setUploadedFileName(file.name);
-        setUploadedValuesText(text);
-        setTagChanges(changes);
-        setUpdatedValuesYaml(updatedYaml);
-        setWizardStep(2);
-      } catch (thrown) {
-        const message =
-          thrown instanceof Error
-            ? thrown.message
-            : "Failed to process the uploaded values.yaml file.";
-        setWizardError(message);
-        setUploadedFileName(null);
-        setUploadedValuesText("");
-        setTagChanges([]);
-        setUpdatedValuesYaml("");
-      } finally {
-        setWizardProcessing(false);
-        if (event.target) {
-          // Allow uploading the same file again
-          event.target.value = "";
-        }
-      }
-    },
-    [imageTagMap],
-  );
-
-  const handleWizardPrev = useCallback(() => {
-    setWizardError(null);
-    setWizardStep((current) => (current > 1 ? ((current - 1) as WizardStepId) : current));
   }, []);
 
-  const handleWizardNext = useCallback(() => {
-    if (wizardProcessing) {
-      return;
-    }
-
-    if (wizardStep === 1) {
-      if (!uploadedValuesText) {
-        setWizardError("Upload a values.yaml file to continue.");
-        return;
-      }
-      setWizardError(null);
-      setWizardStep(2);
-      return;
-    }
-
-    if (wizardStep === 2) {
-      if (!updatedValuesYaml) {
-        setWizardError(
-          "We could not generate an updated values.yaml file. Upload it again to retry.",
-        );
-        return;
-      }
-      setWizardError(null);
-      setWizardStep(3);
-      return;
-    }
-
-    closeWizard();
-  }, [closeWizard, updatedValuesYaml, uploadedValuesText, wizardProcessing, wizardStep]);
-
-  const imageMetadataReady = Boolean(
-    imageTagMap && Object.keys(imageTagMap).length > 0,
-  );
-
-  let wizardStepBody: ReactElement;
-  if (wizardStep === 1) {
-    wizardStepBody = (
-      <div className="flex flex-col gap-4 rounded-2xl border border-white/12 bg-black/40 p-5">
-        <p className="text-sm text-muted">
-          Upload your existing <span className="font-mono text-foreground">values.yaml</span>.
-          The file never leaves your browser and is processed locally.
-        </p>
-        {!imageMetadataReady ? (
-          <div className="rounded-xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 text-xs text-amber-100">
-            Image tag metadata for this release is still syncing. Once the artifacts are ready you
-            can rerun this helper.
-          </div>
-        ) : null}
-        <div className="flex flex-col items-start gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".yaml,.yml,text/yaml,application/x-yaml"
-            className="hidden"
-            onChange={handleFileInputChange}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={wizardProcessing || !imageMetadataReady}
-            className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-transparent px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <FileUp className="h-4 w-4" />
-            Select values.yaml
-          </button>
-          {uploadedFileName ? (
-            <span className="text-xs text-muted">
-              Selected file:
-              <span className="ml-1 font-mono text-foreground">{uploadedFileName}</span>
-            </span>
-          ) : null}
-          {wizardProcessing ? (
-            <span className="inline-flex items-center gap-2 text-xs text-muted">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-              Processing in your browser...
-            </span>
-          ) : null}
-        </div>
-      </div>
-    );
-  } else if (wizardStep === 2) {
-    if (!uploadedValuesText) {
-      wizardStepBody = (
-        <div className="rounded-2xl border border-white/12 bg-black/40 p-6 text-sm text-muted">
-          Upload a values.yaml file to review tag changes.
-        </div>
-      );
-    } else {
-      const summary = tagChanges.reduce(
-        (acc, change) => {
-          acc[change.status] += 1;
-          return acc;
-        },
-        { updated: 0, unchanged: 0, missing: 0 } as Record<
-          TagChange["status"],
-          number
-        >,
-      );
-
-      wizardStepBody = (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-muted">
-            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3 py-1 text-emerald-100">
-              Updated {summary.updated}
-            </span>
-            <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">
-              Already current {summary.unchanged}
-            </span>
-            <span className="rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-amber-100">
-              Missing {summary.missing}
-            </span>
-          </div>
-          <div className="custom-scrollbar max-h-[360px] space-y-3 overflow-y-auto pr-1">
-            {tagChanges.length === 0 ? (
-              <div className="rounded-2xl border border-white/12 bg-black/40 p-6 text-sm text-muted">
-                No Docker image tags were detected in your values.yaml file.
-              </div>
-            ) : (
-              tagChanges.map((change) => {
-                const isMissing = change.status === "missing";
-                const isUpdated = change.status === "updated";
-                const statusLabel =
-                  change.status === "updated"
-                    ? "Updated"
-                    : change.status === "unchanged"
-                      ? "Already current"
-                      : "Not found";
-                const badgeClasses = isMissing
-                  ? "border border-amber-400/60 bg-amber-500/15 text-amber-100"
-                  : isUpdated
-                    ? "border border-emerald-400/50 bg-emerald-500/15 text-emerald-100"
-                    : "border border-white/20 bg-white/5 text-muted";
-                const StatusIcon = isMissing ? AlertTriangle : CheckCircle2;
-
-                return (
-                  <div
-                    key={change.key}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/12 bg-black/40 p-4"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-1">
-                        <span className="text-sm font-semibold text-foreground">
-                          {change.key}
-                        </span>
-                        {change.repository ? (
-                          <span className="flex items-center text-xs text-muted">
-                            Repository:
-                            <span className="ml-1 font-mono text-foreground">
-                              {change.repository}
-                            </span>
-                          </span>
-                        ) : null}
-                        <span className="block font-mono text-[11px] text-muted">
-                          Path: {change.path}
-                        </span>
-                      </div>
-                      <span
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.3em] ${badgeClasses}`}
-                      >
-                        <StatusIcon className="h-3.5 w-3.5" />
-                        {statusLabel}
-                      </span>
-                    </div>
-                    {isMissing ? (
-                      <p className="text-xs text-amber-100">
-                        We could not find {change.path} in your overrides. Update it manually if needed.
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-foreground">
-                        <span className="text-muted">was</span>
-                        <span>{change.oldTag ?? "—"}</span>
-                        <ArrowRight className="h-3 w-3 text-muted" />
-                        <span>{change.newTag}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      );
-    }
-  } else {
-    wizardStepBody = updatedValuesYaml ? (
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted">
-          Copy the refreshed <span className="font-mono text-foreground">values.yaml</span>. Use the
-          copy button to paste it back into your environment.
-        </p>
-        <CodeBlock
-          label="values.yaml"
-          value={updatedValuesYaml}
-          language="yaml"
-          version={selectedVersion ?? undefined}
-          className="max-h-[420px]"
-        />
-      </div>
-    ) : (
-      <div className="rounded-2xl border border-white/12 bg-black/40 p-6 text-sm text-muted">
-        Upload your values.yaml file to generate an updated version.
-      </div>
-    );
-  }
-
+  const handleCloseWizard = useCallback(() => {
+    setWizardOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!selectedVersion) {
@@ -915,83 +581,118 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col gap-6 overflow-hidden px-4 py-6 md:px-6 lg:px-8">
-      <header className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-2">
-          <a
-            href="https://langgenius.github.io/dify-helm/#/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
-          >
-            <ArrowUpRight className="h-3 w-3" />
-            Dify Helm
-          </a>
-          <h1 className="text-3xl font-semibold text-foreground md:text-4xl">
-            Dify Helm Nightly Cheatsheet
-          </h1>
-          <p className="max-w-2xl text-sm text-muted md:text-base">
+    <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
+      <header className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex-1 space-y-1.5">
+          <div className="flex items-center gap-3">
+            <a
+              href="https://langgenius.github.io/dify-helm/#/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground"
+            >
+              <ArrowUpRight className="h-2.5 w-2.5" />
+              Dify Helm
+            </a>
+            <h1 className="text-xl font-semibold text-foreground md:text-2xl">
+              Dify Helm Nightly Cheatsheet
+            </h1>
+          </div>
+          <p className="max-w-2xl text-xs text-muted-foreground md:text-sm">
             Automatic daily snapshots of Helm chart default values and container image
             version references to support your helm upgrade process.
           </p>
         </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-white/12 bg-black px-4 py-3 text-sm text-muted/80">
-          <CalendarClock className="h-5 w-5 text-accent" />
-          <div className="flex flex-col leading-tight">
-            <span className="text-xs uppercase tracking-widest text-muted">
-              Last sync
-            </span>
-            <span className="text-sm text-foreground">
-              {data?.lastUpdated ? formatDate(data.lastUpdated) : "pending"}
-            </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+            <CalendarClock className="h-4 w-4 text-primary" />
+            <div className="flex flex-col leading-tight">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Last sync
+              </span>
+              <span className="text-xs font-medium text-foreground">
+                {data?.lastUpdated ? formatDate(data.lastUpdated) : "pending"}
+              </span>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
       <section className="grid flex-1 gap-6 overflow-hidden lg:grid-cols-[320px_1fr]">
-        <aside className="relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-3xl border border-white/12 bg-black p-4">
-          <div className="flex items-center justify-between text-xs uppercase tracking-widest text-muted">
+        <aside className="relative flex h-full w-full flex-col gap-4 overflow-hidden rounded-3xl border border-border bg-card p-4">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-center justify-between text-xs uppercase tracking-widest text-muted-foreground"
+          >
             <span>Published Versions</span>
-            <span>{versions.length}</span>
-          </div>
+            <motion.span
+              key={versions.length}
+              initial={{ scale: 1.5, color: "rgb(0, 51, 255)" }}
+              animate={{ scale: 1, color: "inherit" }}
+              transition={{ duration: 0.3 }}
+            >
+              {versions.length}
+            </motion.span>
+          </motion.div>
           <div className="custom-scrollbar -mx-3 flex-1 overflow-y-auto px-1">
             {versions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/15 bg-black p-6 text-center text-sm text-muted">
-                <Info className="h-6 w-6 text-accent" />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-muted p-6 text-center text-sm text-muted-foreground"
+              >
+                <Info className="h-6 w-6 text-primary" />
                 <p>
                   No cached releases yet. Trigger the cron endpoint or wait for
                   the daily sync.
                 </p>
-              </div>
+              </motion.div>
             ) : (
               <ul className="flex flex-col">
-                {versions.map((version) => {
+                {versions.map((version, index) => {
                   const isActive = version.version === selectedVersion;
                   const showDiffIcon = !isActive && Boolean(selectedVersion);
                   const showWizardButton = isActive;
                   return (
-                    <li key={version.version} className="mb-2 last:mb-0">
+                    <motion.li
+                      key={version.version}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        duration: 0.3,
+                        delay: index * 0.05,
+                        ease: "easeOut",
+                      }}
+                      className="mb-2 last:mb-0"
+                    >
                       <div className="relative">
-                        <button
+                        <motion.button
                           type="button"
                           onClick={() => setSelectedVersion(version.version)}
-                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                             isActive
-                              ? "border-[#03f] bg-[#03f] text-white"
-                              : "border-white/12 bg-transparent text-muted hover:border-white/40 hover:bg-white/5 hover:text-foreground"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-transparent text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-foreground"
                           }`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <span
                               className={`text-base font-semibold tracking-wide ${
-                                isActive ? "text-white" : "text-foreground"
+                                isActive ? "text-primary-foreground" : "text-foreground"
                               }`}
                             >
                               v{version.version}
                             </span>
                             <span
                               className={`text-[10px] font-mono uppercase tracking-widest ${
-                                isActive ? "text-white/90" : "text-muted"
+                                isActive ? "text-primary-foreground/90" : "text-muted-foreground"
                               }`}
                             >
                               sha256:{version.values.hash.slice(0, 7)}
@@ -999,15 +700,15 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           </div>
                           <div
                             className={`flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${
-                              isActive ? "text-white/90" : "text-muted"
+                              isActive ? "text-primary-foreground/90" : "text-muted-foreground"
                             }`}
                           >
                             {version.appVersion && (
                               <span
                                 className={`rounded-full border px-2 py-0.5 ${
                                   isActive
-                                    ? "border-white/30 bg-white/10 text-white"
-                                    : "border-white/15 bg-white/5 text-muted"
+                                    ? "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground"
+                                    : "border-border bg-muted text-muted-foreground"
                                 }`}
                               >
                                 App {version.appVersion}
@@ -1016,22 +717,22 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           </div>
                           {version.createdAt && (
                             <span
-                              className={`mt-1 text-[10px] uppercase tracking-[0.08em] ${
-                                isActive ? "text-white/80" : "text-muted/80"
+                              className={`mt-1 text-[9px] uppercase tracking-[0.05em] ${
+                                isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
                               }`}
                             >
                               {formatDate(version.createdAt)}
                             </span>
                           )}
-                        </button>
+                        </motion.button>
                         {showWizardButton ? (
                           <button
                             type="button"
-                            onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                            onClick={(event) => {
                               event.stopPropagation();
                               handleOpenWizard();
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 text-[10px] font-semibold text-emerald-100 transition hover:border-emerald-300/70 hover:bg-emerald-500/30 hover:text-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/40 bg-primary-foreground/20 px-3 py-1 text-[10px] font-semibold text-primary-foreground transition hover:border-primary-foreground/60 hover:bg-primary-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/60"
                             aria-label="Open tag update wizard"
                             title="Open tag update wizard"
                           >
@@ -1046,7 +747,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/70 px-3 py-1 text-[10px] font-semibold text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] font-semibold text-foreground transition hover:border-primary/50 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -1063,7 +764,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           </button>
                         ) : null}
                       </div>
-                    </li>
+                    </motion.li>
                   );
                 })}
               </ul>
@@ -1073,7 +774,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
         <article className="flex h-full flex-col gap-6 overflow-hidden">
           {error ? (
-            <div className="flex flex-col gap-4 rounded-2xl border border-red-500/40 bg-black p-6 text-sm text-red-200">
+            <div className="flex flex-col gap-4 rounded-2xl border border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive-foreground">
               <div className="flex items-center gap-2 font-semibold">
                 <Info className="h-4 w-4" />
                 {error}
@@ -1081,7 +782,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               <button
                 type="button"
                 onClick={handleRetry}
-                className="inline-flex w-fit items-center gap-2 rounded-full border border-red-400/60 bg-transparent px-4 py-1 text-xs uppercase tracking-[0.3em] text-red-200 transition hover:border-red-300 hover:bg-red-500/10"
+                className="inline-flex w-fit items-center gap-2 rounded-full border border-destructive bg-transparent px-4 py-1 text-xs uppercase tracking-[0.3em] text-destructive-foreground transition hover:border-destructive/80 hover:bg-destructive/20"
               >
                 <RefreshCw className="h-3 w-3" />
                 Retry
@@ -1091,244 +792,129 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
             <div className="flex items-center justify-center gap-4">
-              <div className="flex w-full justify-center rounded-full border border-white/12 bg-black/60 p-1">
+              <div className="relative flex w-full justify-center rounded-full border border-border bg-muted p-1">
                 {artifactTabs.map((tab) => {
                   const isActive = tab.id === activeTab.id;
                   return (
-                    <button
+                    <motion.button
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveArtifact(tab.id)}
-                      className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition ${
+                      className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${
                         isActive
-                          ? "border border-white bg-white text-black"
-                          : "border border-transparent text-muted hover:border-white/30 hover:text-foreground"
+                          ? "text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
+                      whileHover={
+                        !isActive
+                          ? {
+                              scale: 1.02,
+                            }
+                          : {}
+                      }
+                      whileTap={{
+                        scale: 0.98,
+                      }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 30,
+                      }}
                     >
-                      {tab.label}
-                    </button>
+                      {/* 激活状态的背景指示器 */}
+                      {isActive && (
+                        <motion.div
+                          layoutId="artifact-tab-indicator"
+                          className="absolute inset-0 rounded-full border border-primary bg-primary"
+                          transition={{
+                            type: "spring",
+                            stiffness: 500,
+                            damping: 35,
+                          }}
+                        />
+                      )}
+                      {/* Hover 状态的微妙高光效果 */}
+                      {!isActive && (
+                        <motion.div
+                          className="pointer-events-none absolute inset-0 rounded-full bg-accent/30"
+                          initial={{ opacity: 0 }}
+                          whileHover={{ opacity: 1 }}
+                          transition={{
+                            duration: 0.2,
+                          }}
+                        />
+                      )}
+                      <span className="pointer-events-none relative z-10">{tab.label}</span>
+                    </motion.button>
                   );
                 })}
               </div>
             </div>
             <div className="relative flex-1 overflow-hidden">
               {loading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/70 backdrop-blur">
-                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                </div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur"
+                >
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </motion.div>
               )}
-              {activeTab.type === "code" ? (
-                <CodeBlock
-                  label={activeTab.label}
-                  value={activeTab.content}
-                  language={activeTab.language}
-                  version={selectedVersion ?? undefined}
-                  className="h-full w-full"
-                />
-              ) : (
-                <ImageValidationTable
-                  version={selectedVersion ?? undefined}
-                  data={validationData}
-                  error={validationError}
-                  loading={loading}
-                  hasAsset={hasValidationAsset}
-                  onRetry={handleRetry}
-                />
-              )}
+              <motion.div
+                key={activeTab.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="h-full"
+              >
+                {activeTab.type === "code" ? (
+                  <CodeBlock
+                    label={activeTab.label}
+                    value={activeTab.content}
+                    language={activeTab.language}
+                    version={selectedVersion ?? undefined}
+                    className="h-full w-full"
+                  />
+                ) : (
+                  <ImageValidationTable
+                    version={selectedVersion ?? undefined}
+                    data={validationData}
+                    error={validationError}
+                    loading={loading}
+                    hasAsset={hasValidationAsset}
+                    onRetry={handleRetry}
+                  />
+                )}
+              </motion.div>
             </div>
           </div>
         </article>
       </section>
-      {wizardOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
-          onClick={closeWizard}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="wizard-dialog-title"
-        >
-          <div
-            className="relative flex w-full max-w-3xl flex-col gap-6 rounded-3xl border border-white/12 bg-[#080808] p-6 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={closeWizard}
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/80 transition hover:border-white/40 hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              aria-label="Close update wizard"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <header className="flex flex-col gap-2 pr-12">
-              <span className="text-xs uppercase tracking-[0.3em] text-muted">
-                Synchronize image tags
-              </span>
-              <h2 id="wizard-dialog-title" className="text-2xl font-semibold text-foreground">
-                v{selectedVersion ?? "?"} values.yaml helper
-              </h2>
-              <p className="text-sm text-muted">
-                Refresh Docker image tags from the selected release without leaving your browser.
-              </p>
-            </header>
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                  {WIZARD_STEPS.map((step, index) => {
-                    const isComplete = wizardStep > step.id;
-                    const isActive = wizardStep === step.id;
-                    const isLit = isActive || isComplete;
-                    return (
-                      <div key={step.id} className="flex flex-1 items-center gap-3">
-                        <span
-                          className={`inline-flex h-3.5 w-3.5 rounded-full transition-colors ${
-                            isLit
-                              ? "bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.65)]"
-                              : "bg-white/15"
-                          }`}
-                        />
-                        {index < WIZARD_STEPS.length - 1 ? (
-                          <span
-                            className={`h-px flex-1 ${
-                              isComplete ? "bg-emerald-400/60" : "bg-white/12"
-                            }`}
-                          />
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-between text-[10px] uppercase tracking-[0.35em] text-muted">
-                  {WIZARD_STEPS.map((step) => {
-                    const isLit = wizardStep >= step.id;
-                    return (
-                      <span
-                        key={step.id}
-                        className={`flex-1 text-center ${isLit ? "text-emerald-200" : ""}`}
-                      >
-                        {step.label}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-              {wizardStepBody}
-              {wizardError ? (
-                <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-                  {wizardError}
-                </div>
-              ) : null}
-            </div>
-            <footer className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                type="button"
-                onClick={handleWizardPrev}
-                disabled={wizardStep === 1}
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted transition hover:border-white/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Previous
-              </button>
-              <div className="flex items-center gap-2 text-xs text-muted">
-                {wizardProcessing ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-                    Working...
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={handleWizardNext}
-                disabled={wizardProcessing}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-400/60 bg-emerald-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-100 transition hover:border-emerald-300/80 hover:bg-emerald-500/30 hover:text-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {wizardStep === 3 ? "Finish" : "Next"}
-              </button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
-      {diffModalOpen && diffMeta ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
-          onClick={closeDiffModal}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="diff-dialog-title"
-        >
-          <div
-            className="relative flex w-full max-w-[calc(100%-2rem)] flex-col gap-5 rounded-3xl border border-white/12 bg-[#080808] p-6 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={closeDiffModal}
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/80 transition hover:border-white/40 hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              aria-label="Close comparison dialog"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <header className="flex flex-col gap-2 pr-12">
-              <span className="text-xs uppercase tracking-[0.3em] text-muted">
-                Comparing cached artifacts
-              </span>
-              <h2
-                id="diff-dialog-title"
-                className="text-2xl font-semibold text-foreground"
-              >
-                v{diffMeta.targetVersion} ↔ v{diffMeta.baseVersion}
-              </h2>
-              <p className="text-sm text-muted">
-                Review differences between releases using the same artifact tabs.
-              </p>
-            </header>
-            <div className="flex items-center justify-center gap-4">
-              <div className="flex w-full justify-center rounded-full border border-white/12 bg-black/60 p-1">
-                {codeTabs.map((tab) => {
-                  const isActive = tab.id === diffActiveTabId;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveArtifact(tab.id)}
-                      className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition ${
-                        isActive
-                          ? "border border-white bg-white text-black"
-                          : "border border-transparent text-muted hover:border-white/30 hover:text-foreground"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {diffError ? (
-              <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-                {diffError}
-              </div>
-            ) : null}
-            <div className="relative flex max-h-[65vh] flex-1 flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/80">
-              {diffLoading ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/75 backdrop-blur">
-                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
-                </div>
-              ) : null}
-              <div className="custom-scrollbar max-h-[65vh] flex-1 overflow-auto p-4">
-                <ReactDiffViewer
-                  oldValue={diffActiveContent.oldValue}
-                  newValue={diffActiveContent.newValue}
-                  splitView
-                  styles={diffViewerStyles}
-                  useDarkTheme
-                  showDiffOnly={false}
-                  leftTitle={`v${diffMeta.targetVersion}`}
-                  rightTitle={`v${diffMeta.baseVersion}`}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <DiffComparisonModal
+        isOpen={diffModalOpen && Boolean(diffMeta)}
+        onClose={closeDiffModal}
+        targetVersion={diffMeta?.targetVersion ?? ""}
+        baseVersion={diffMeta?.baseVersion ?? ""}
+        activeTabId={diffActiveTabId}
+        tabs={codeTabs}
+        onTabChange={(tabId) =>
+          setActiveArtifact(tabId as "values" | "images" | "validation")
+        }
+        diffContent={diffActiveContent}
+        diffViewerStyles={diffViewerStyles}
+        theme={resolvedTheme}
+        isLoading={diffLoading}
+        error={diffError}
+      />
+
+      <ValuesWizardModal
+        isOpen={wizardOpen}
+        onClose={handleCloseWizard}
+        selectedVersion={selectedVersion}
+        imageTagMap={imageTagMap}
+      />
     </div>
   );
 }

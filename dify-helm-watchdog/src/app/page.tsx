@@ -9,9 +9,5 @@ export const revalidate = 86400; // 24 hours
 export default async function Home() {
   const cache = await loadCache();
 
-  return (
-    <main className="relative z-10 flex h-[100vh] w-full">
-      <VersionExplorer data={cache} />
-    </main>
-  );
+  return <VersionExplorer data={cache} />;
 }
