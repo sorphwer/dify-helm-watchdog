@@ -68,22 +68,30 @@ const VariantCell = ({ record, name }: { record: ImageValidationRecord; name: "o
     );
   }
 
+  // If original (multi-arch) exists and is found, treat arch-specific variants as available
+  // even if -amd64/-arm64 specific tags don't exist
+  const originalVariant = record.variants.find((v) => v.name === "original");
+  const isMultiArchAvailable = originalVariant?.status === "found" && name !== "original";
+  const effectiveStatus = isMultiArchAvailable && variant.status === "missing" ? "found" : variant.status;
+
   return (
     <td className="px-4 py-3 align-top">
-      <div className={`flex flex-col gap-1.5 rounded-lg border px-3 py-2 ${variantCellClasses[variant.status]}`}>
+      <div className={`flex flex-col gap-1.5 rounded-lg border px-3 py-2 ${variantCellClasses[effectiveStatus]}`}>
         <div className="flex items-center gap-2">
           <span
-            className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${variantDotClasses[variant.status]}`}
+            className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${variantDotClasses[effectiveStatus]}`}
             aria-hidden="true"
           />
-          <span className={`font-mono text-[12px] font-semibold ${variantTextClasses[variant.status]}`}>
-            {variant.tag}
+          <span className={`font-mono text-[12px] font-semibold ${variantTextClasses[effectiveStatus]}`}>
+            {isMultiArchAvailable && variant.status === "missing" ? record.sourceTag : variant.tag}
           </span>
         </div>
-        <span className={`text-[10px] font-semibold uppercase tracking-widest ${variantTextClasses[variant.status]}`}>
-          {variantLabels[variant.status]}
+        <span className={`text-[10px] font-semibold uppercase tracking-widest ${variantTextClasses[effectiveStatus]}`}>
+          {isMultiArchAvailable && variant.status === "missing" 
+            ? "Available (multi-arch)" 
+            : variantLabels[effectiveStatus]}
         </span>
-        {variant.error ? (
+        {variant.error && !isMultiArchAvailable ? (
           <span className="text-[11px] text-destructive">
             {variant.error}
           </span>
