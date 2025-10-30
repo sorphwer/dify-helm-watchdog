@@ -84,43 +84,36 @@ const diffViewerStyles: ReactDiffViewerStylesOverride = {
     },
   },
   gutter: {
-    padding: "0 8px",
-    minWidth: "48px",
-    fontFamily: "var(--font-geist-mono), monospace",
-    fontSize: "12px",
+    color: "rgba(148,163,184,0.65)",
+    padding: "0 4px",
+    minWidth: "36px",
+    width: "36px",
+    textAlign: "right",
+    fontSize: "10px",
   },
   marker: {
-    padding: "0 8px",
-    fontFamily: "var(--font-geist-mono), monospace",
-    fontSize: "13px",
-    fontWeight: 600,
+    padding: "0 4px",
+    width: "20px",
+    fontSize: "10px",
   },
   diffContainer: {
-    borderRadius: "12px",
+    borderRadius: "16px",
     overflow: "hidden",
     width: "100%",
-    border: "1px solid oklch(28% 0 0)", // dark mode border
   },
   titleBlock: {
-    padding: "10px 16px",
-    fontFamily: "var(--font-geist-sans), sans-serif",
-    fontSize: "12px",
-    fontWeight: 600,
-    textTransform: "uppercase",
-    letterSpacing: "0.1em",
+    padding: "8px 12px",
   },
   content: {
     width: "auto",
-    fontSize: "11px",
   },
   contentText: {
-    padding: "0 12px",
-    fontFamily: "var(--font-geist-mono), monospace",
-    fontSize: "13px",
-    lineHeight: "1.6",
+    padding: "0 8px",
+    fontSize: "11px",
+    lineHeight: "1.4",
   },
   line: {
-    padding: "2px 0",
+    padding: "0",
   },
   splitView: {
     width: "100%",
@@ -215,7 +208,6 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [reloadTarget, setReloadTarget] = useState<string | null>(null);
   const [processedReload, setProcessedReload] = useState(0);
   const [diffModalOpen, setDiffModalOpen] = useState(false);
-  const [diffModalFullscreen, setDiffModalFullscreen] = useState(false);
   const [diffMeta, setDiffMeta] = useState<{
     baseVersion: string;
     targetVersion: string;
@@ -733,19 +725,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           )}
                         </motion.button>
                         {showDiffIcon ? (
-                          <motion.button
+                          <button
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            initial={{ opacity: 0, scale: 0 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0 }}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card/70 text-xs text-muted-foreground transition-colors hover:border-accent hover:bg-accent/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xs text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -758,27 +744,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                             }
                           >
                             <Diff className="h-4 w-4" />
-                          </motion.button>
+                          </button>
                         ) : null}
                         {isActive ? (
-                          <motion.button
+                          <button
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
                               handleOpenWizard();
                             }}
-                            initial={{ opacity: 0, scale: 0 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0 }}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground transition-colors hover:border-primary-foreground/50 hover:bg-primary-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="absolute bottom-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xs text-muted transition hover:border-white/40 hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                             aria-label="Update values.yaml tags"
                             title="Sync image tags to your values.yaml"
                           >
                             <FileUp className="h-4 w-4" />
-                          </motion.button>
+                          </button>
                         ) : null}
                       </div>
                     </motion.li>
@@ -865,7 +845,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                     value={activeTab.content}
                     language={activeTab.language}
                     version={selectedVersion ?? undefined}
-                    className="mx-auto h-full w-full max-w-4xl"
+                    className="h-full w-full"
                   />
                 ) : (
                   <ImageValidationTable
@@ -885,8 +865,6 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       <DiffComparisonModal
         isOpen={diffModalOpen && Boolean(diffMeta)}
         onClose={closeDiffModal}
-        isFullscreen={diffModalFullscreen}
-        onToggleFullscreen={() => setDiffModalFullscreen(!diffModalFullscreen)}
         targetVersion={diffMeta?.targetVersion ?? ""}
         baseVersion={diffMeta?.baseVersion ?? ""}
         activeTabId={diffActiveTabId}

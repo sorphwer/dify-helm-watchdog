@@ -36,7 +36,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {/* 主容器 - 统一控制边距和最大宽度 */}
-          <div className="mx-auto h-screen w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
+          <div className="mx-auto h-screen w-full px-4 py-6 md:px-6 lg:px-8">
             {children}
           </div>
         </ThemeProvider>

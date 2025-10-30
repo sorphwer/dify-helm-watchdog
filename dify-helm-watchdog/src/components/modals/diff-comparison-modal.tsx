@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Maximize2, Minimize2, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactDiffViewer from "react-diff-viewer";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
@@ -8,8 +8,6 @@ import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
 interface DiffComparisonModalProps {
   isOpen: boolean;
   onClose: () => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
   targetVersion: string;
   baseVersion: string;
   activeTabId: string;
@@ -28,8 +26,6 @@ interface DiffComparisonModalProps {
 export default function DiffComparisonModal({
   isOpen,
   onClose,
-  isFullscreen,
-  onToggleFullscreen,
   targetVersion,
   baseVersion,
   activeTabId,
@@ -58,30 +54,11 @@ export default function DiffComparisonModal({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
-        className={`relative flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-2xl transition-all ${
-          isFullscreen
-            ? "h-[95vh] w-[95vw] max-w-none"
-            : "w-full max-w-6xl"
-        }`}
+        className="relative flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-2xl transition-all h-[95vh] w-[95vw] max-w-none"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Header buttons */}
-        <div className="absolute right-4 top-4 flex items-center gap-2">
-          <motion.button
-            type="button"
-            onClick={onToggleFullscreen}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:border-accent hover:bg-accent/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
-            )}
-          </motion.button>
+        <div className="absolute right-4 top-4">
           <motion.button
             type="button"
             onClick={onClose}
@@ -153,9 +130,7 @@ export default function DiffComparisonModal({
 
         {/* Diff content */}
         <div
-          className={`relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-muted ${
-            isFullscreen ? "max-h-[calc(95vh-200px)]" : "max-h-[65vh]"
-          }`}
+          className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-muted max-h-[calc(95vh-200px)]"
         >
           {isLoading ? (
             <motion.div
@@ -167,9 +142,7 @@ export default function DiffComparisonModal({
             </motion.div>
           ) : null}
           <div
-            className={`custom-scrollbar flex-1 overflow-auto rounded-xl bg-muted p-4 ${
-              isFullscreen ? "max-h-[calc(95vh-200px)]" : "max-h-[65vh]"
-            }`}
+            className="custom-scrollbar flex-1 overflow-auto rounded-xl bg-muted p-4 max-h-[calc(95vh-200px)]"
           >
             <ReactDiffViewer
               oldValue={diffContent.oldValue}
