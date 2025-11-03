@@ -589,7 +589,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               href="https://langgenius.github.io/dify-helm/#/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground"
+              className={`inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground ${
+                resolvedTheme === "dark" ? "text-white" : "text-primary"
+              }`}
             >
               <ArrowUpRight className="h-2.5 w-2.5" />
               Dify Helm
@@ -605,7 +607,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-            <CalendarClock className="h-4 w-4 text-primary" />
+            <CalendarClock className={`h-4 w-4 ${resolvedTheme === "dark" ? "text-white" : "text-primary"}`} />
             <div className="flex flex-col leading-tight">
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
                 Last sync

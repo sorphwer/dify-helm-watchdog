@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useTheme } from "next-themes";
 import YAML from "yaml";
 import { CodeBlock } from "@/components/ui/code-block";
 
@@ -124,6 +125,7 @@ export default function ValuesWizardModal({
   selectedVersion,
   imageTagMap,
 }: ValuesWizardModalProps) {
+  const { resolvedTheme } = useTheme();
   const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedValuesText, setUploadedValuesText] = useState<string>("");
@@ -489,11 +491,10 @@ export default function ValuesWizardModal({
             </div>
             <div className="flex justify-between text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
               {WIZARD_STEPS.map((step) => {
-                const isLit = wizardStep >= step.id;
                 return (
                   <span
                     key={step.id}
-                    className={`flex-1 text-center ${isLit ? "text-success-foreground" : ""}`}
+                    className="flex-1 text-center"
                   >
                     {step.label}
                   </span>
@@ -533,7 +534,9 @@ export default function ValuesWizardModal({
             disabled={wizardProcessing}
             whileHover={!wizardProcessing ? { scale: 1.02 } : {}}
             whileTap={!wizardProcessing ? { scale: 0.98 } : {}}
-            className="inline-flex items-center gap-2 rounded-full border border-success/60 bg-success/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-success-foreground transition hover:border-success/80 hover:bg-success/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success disabled:cursor-not-allowed disabled:opacity-60"
+            className={`inline-flex items-center gap-2 rounded-full border border-success/60 bg-success/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition hover:border-success/80 hover:bg-success/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success disabled:cursor-not-allowed disabled:opacity-60 ${
+              resolvedTheme === "dark" ? "text-white" : "text-foreground"
+            }`}
           >
             {wizardStep === 3 ? "Finish" : "Next"}
           </motion.button>
