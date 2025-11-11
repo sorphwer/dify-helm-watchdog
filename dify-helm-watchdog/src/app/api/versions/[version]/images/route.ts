@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadCache } from "@/lib/helm";
+import type { ImageValidationRecord } from "@/lib/types";
 import YAML from "yaml";
 
 export const runtime = "nodejs";
@@ -90,7 +91,12 @@ export async function GET(
     const imagesData = YAML.parse(imagesText) as Record<string, ImageInfo>;
 
     // 获取验证数据（如果需要）
-    let validationData: Record<string, any> | null = null;
+    interface ValidationDataEntry {
+      status: "all_found" | "partial" | "missing" | "error";
+      targetImageName: string;
+      variants: ImageValidationRecord["variants"];
+    }
+    let validationData: Record<string, ValidationDataEntry> | null = null;
     if (includeValidation && versionEntry.imageValidation) {
       try {
         let validationText = versionEntry.imageValidation.inline;
@@ -101,7 +107,9 @@ export async function GET(
           }
         }
         if (validationText) {
-          const validation = JSON.parse(validationText);
+          const validation = JSON.parse(validationText) as {
+            images?: ImageValidationRecord[];
+          };
           // 创建一个映射表，方便查找
           validationData = {};
           for (const img of validation.images || []) {
@@ -147,8 +155,14 @@ export async function GET(
 
     // 根据格式返回数据
     if (format === "yaml") {
+      interface YamlEntry {
+        repository: string;
+        tag: string;
+        targetImageName?: string;
+        validation?: ImageEntry["validation"];
+      }
       const yamlContent = YAML.stringify(
-        images.reduce((acc, img) => {
+        images.reduce<Record<string, YamlEntry>>((acc, img) => {
           acc[img.path] = {
             repository: img.repository,
             tag: img.tag,
@@ -156,7 +170,7 @@ export async function GET(
             ...(img.validation ? { validation: img.validation } : {}),
           };
           return acc;
-        }, {} as Record<string, any>),
+        }, {}),
       );
 
       return new Response(yamlContent, {

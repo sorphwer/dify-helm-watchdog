@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadCache } from "@/lib/helm";
-import type { CachePayload, StoredVersion } from "@/lib/types";
+import type { StoredVersion, ImageValidationRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -47,15 +47,17 @@ const computeImageValidationStats = async (
       validationText = await response.text();
     }
 
-    const validation = JSON.parse(validationText);
+    const validation = JSON.parse(validationText) as {
+      images?: ImageValidationRecord[];
+    };
     const images = validation.images || [];
 
     return {
       total: images.length,
-      allFound: images.filter((img: any) => img.status === "all_found").length,
-      partial: images.filter((img: any) => img.status === "partial").length,
-      missing: images.filter((img: any) => img.status === "missing").length,
-      error: images.filter((img: any) => img.status === "error").length,
+      allFound: images.filter((img) => img.status === "all_found").length,
+      partial: images.filter((img) => img.status === "partial").length,
+      missing: images.filter((img) => img.status === "missing").length,
+      error: images.filter((img) => img.status === "error").length,
     };
   } catch (error) {
     console.warn(
