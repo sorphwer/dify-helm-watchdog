@@ -44,10 +44,10 @@ interface ImagesResponse {
  */
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ version: string }> },
+  { params }: { params: { version: string } },
 ) {
   try {
-    const { version } = await params;
+    const { version } = params;
     const url = new URL(request.url);
     const format = url.searchParams.get("format") || "json";
     const includeValidation = url.searchParams.get("include_validation") === "true";
