@@ -9,10 +9,10 @@ export const runtime = "nodejs";
  */
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ version: string }> },
+  { params }: { params: { version: string } },
 ) {
   try {
-    const { version } = await params;
+    const { version } = params;
 
     const cache = await loadCache();
     if (!cache) {
