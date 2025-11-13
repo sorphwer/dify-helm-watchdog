@@ -149,7 +149,8 @@ describe("POST /api/v1/cron", () => {
 
   it("should stream sync progress logs", async () => {
     const mockLogs: string[] = [];
-    mockedSyncHelmData.mockImplementation(async ({ log }) => {
+    mockedSyncHelmData.mockImplementation(async (options) => {
+      const log = options?.log || (() => {});
       log("Fetching chart index...");
       mockLogs.push("Fetching chart index...");
       log("Processing version 2.5.0...");
@@ -191,7 +192,9 @@ describe("POST /api/v1/cron", () => {
     let capturedOptions: { forceVersions?: string[] } = {};
 
     mockedSyncHelmData.mockImplementation(async (options) => {
-      capturedOptions = options;
+      if (options) {
+        capturedOptions = options;
+      }
       return {
         processed: 2,
         created: 0,
@@ -253,7 +256,7 @@ describe("POST /api/v1/cron", () => {
 
   it("should handle MissingBlobTokenError gracefully", async () => {
     mockedSyncHelmData.mockRejectedValueOnce(
-      new MissingBlobTokenError("Blob storage token is not configured"),
+      new MissingBlobTokenError(),
     );
 
     const request = new Request("http://localhost/api/v1/cron", {
@@ -446,7 +449,9 @@ describe("POST /api/v1/cron", () => {
     let capturedOptions: { forceVersions?: string[] } = {};
 
     mockedSyncHelmData.mockImplementation(async (options) => {
-      capturedOptions = options;
+      if (options) {
+        capturedOptions = options;
+      }
       return {
         processed: 1,
         created: 0,
@@ -474,7 +479,9 @@ describe("POST /api/v1/cron", () => {
     let capturedOptions: { forceVersions?: string[] } = {};
 
     mockedSyncHelmData.mockImplementation(async (options) => {
-      capturedOptions = options;
+      if (options) {
+        capturedOptions = options;
+      }
       return {
         processed: 2,
         created: 0,
