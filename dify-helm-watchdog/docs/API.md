@@ -4,10 +4,13 @@ Dify Helm Watchdog 提供了一套 RESTful API，用于编程式访问 Helm Char
 
 ## 基础信息
 
-- **Base URL**: `https://your-domain.com/api`
-- **认证**: 无需认证（公开 API）
+- **Base URL**: `https://your-domain.com/api/v1`
+- **认证**: 无需认证（公开 API，cron 端点除外）
 - **响应格式**: JSON（部分端点支持 YAML）
-- **缓存**: 所有响应启用 HTTP 缓存（3600s）
+- **缓存策略**: 
+  - 版本列表: `s-maxage=3600, stale-while-revalidate=86400`
+  - 最新版本: `s-maxage=1800, stale-while-revalidate=3600`
+  - 镜像/验证数据: `s-maxage=3600, stale-while-revalidate=86400`
 
 ---
 
@@ -15,22 +18,29 @@ Dify Helm Watchdog 提供了一套 RESTful API，用于编程式访问 Helm Char
 
 ```bash
 # 获取所有版本列表
-curl https://your-domain.com/api/versions
+curl https://your-domain.com/api/v1/versions
 
 # 获取最新版本信息
-curl https://your-domain.com/api/versions/latest
+curl https://your-domain.com/api/v1/versions/latest
 
 # 获取指定版本的镜像列表（JSON）
-curl https://your-domain.com/api/versions/1.0.0/images
+curl https://your-domain.com/api/v1/versions/1.0.0/images
 
 # 获取指定版本的镜像列表（YAML）
-curl https://your-domain.com/api/versions/1.0.0/images?format=yaml
+curl https://your-domain.com/api/v1/versions/1.0.0/images?format=yaml
 
 # 下载 values.yaml
-curl https://your-domain.com/api/versions/1.0.0/values -o values.yaml
+curl https://your-domain.com/api/v1/versions/1.0.0/values -o values.yaml
 
 # 获取镜像验证结果
-curl https://your-domain.com/api/versions/1.0.0/validation
+curl https://your-domain.com/api/v1/versions/1.0.0/validation
+
+# 检查缓存状态
+curl https://your-domain.com/api/v1/cache
+
+# 触发同步任务（需要认证）
+curl -X POST https://your-domain.com/api/v1/cron \
+  -H "secret: your-cron-secret"
 ```
 
 ---
@@ -42,26 +52,26 @@ curl https://your-domain.com/api/versions/1.0.0/validation
 获取所有可用的 Helm Chart 版本列表。
 
 ```http
-GET /api/versions
+GET /api/v1/versions
 ```
 
 #### Query Parameters
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `include_validation` | boolean | 否 | `false` | 是否包含镜像验证统计 |
+| `includeValidation` | boolean | 否 | `false` | 是否包含镜像验证统计（兼容 `include_validation`） |
 
 #### 响应示例
 
 ```json
 {
-  "lastUpdated": "2024-01-15T10:30:00.000Z",
+  "updateTime": "2024-01-15T10:30:00.000Z",
   "total": 50,
   "versions": [
     {
       "version": "1.0.0",
       "appVersion": "0.7.0",
-      "createdAt": "2024-01-15T08:00:00.000Z",
+      "createTime": "2024-01-15T08:00:00.000Z",
       "digest": "sha256:abc123..."
     }
   ]
@@ -71,18 +81,18 @@ GET /api/versions
 #### 包含验证统计的响应
 
 ```bash
-curl 'https://your-domain.com/api/versions?include_validation=true'
+curl 'https://your-domain.com/api/v1/versions?includeValidation=true'
 ```
 
 ```json
 {
-  "lastUpdated": "2024-01-15T10:30:00.000Z",
+  "updateTime": "2024-01-15T10:30:00.000Z",
   "total": 50,
   "versions": [
     {
       "version": "1.0.0",
       "appVersion": "0.7.0",
-      "createdAt": "2024-01-15T08:00:00.000Z",
+      "createTime": "2024-01-15T08:00:00.000Z",
       "digest": "sha256:abc123...",
       "imageValidation": {
         "total": 10,
@@ -103,7 +113,7 @@ curl 'https://your-domain.com/api/versions?include_validation=true'
 快速获取最新版本的详细信息和相关链接。
 
 ```http
-GET /api/versions/latest
+GET /api/v1/versions/latest
 ```
 
 #### 响应示例
@@ -112,13 +122,13 @@ GET /api/versions/latest
 {
   "version": "1.0.0",
   "appVersion": "0.7.0",
-  "createdAt": "2024-01-15T08:00:00.000Z",
+  "createTime": "2024-01-15T08:00:00.000Z",
   "digest": "sha256:abc123...",
   "urls": {
-    "self": "/api/versions/1.0.0",
-    "images": "/api/versions/1.0.0/images",
-    "values": "/api/versions/1.0.0/values",
-    "validation": "/api/versions/1.0.0/validation"
+    "self": "/api/v1/versions/1.0.0",
+    "images": "/api/v1/versions/1.0.0/images",
+    "values": "/api/v1/versions/1.0.0/values",
+    "validation": "/api/v1/versions/1.0.0/validation"
   }
 }
 ```
@@ -130,7 +140,7 @@ GET /api/versions/latest
 获取特定版本的详细信息（元数据，不包含完整内容）。
 
 ```http
-GET /api/versions/{version}
+GET /api/v1/versions/{version}
 ```
 
 #### Path Parameters
@@ -145,7 +155,7 @@ GET /api/versions/{version}
 {
   "version": "1.0.0",
   "appVersion": "0.7.0",
-  "createdAt": "2024-01-15T08:00:00.000Z",
+  "createTime": "2024-01-15T08:00:00.000Z",
   "chartUrl": "https://langgenius.github.io/dify-helm/dify-1.0.0.tgz",
   "digest": "sha256:abc123...",
   "assets": {
@@ -166,9 +176,10 @@ GET /api/versions/{version}
     }
   },
   "urls": {
-    "images": "/api/versions/1.0.0/images",
-    "values": "/api/versions/1.0.0/values",
-    "validation": "/api/versions/1.0.0/validation"
+    "self": "/api/v1/versions/1.0.0",
+    "images": "/api/v1/versions/1.0.0/images",
+    "values": "/api/v1/versions/1.0.0/values",
+    "validation": "/api/v1/versions/1.0.0/validation"
   }
 }
 ```
@@ -180,7 +191,7 @@ GET /api/versions/{version}
 **这是最常用的端点**，用于获取指定版本中所有镜像及其标签。
 
 ```http
-GET /api/versions/{version}/images
+GET /api/v1/versions/{version}/images
 ```
 
 #### Path Parameters
@@ -194,7 +205,7 @@ GET /api/versions/{version}/images
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `format` | string | 否 | `json` | 返回格式：`json` 或 `yaml` |
-| `include_validation` | boolean | 否 | `false` | 是否包含镜像验证信息 |
+| `includeValidation` | boolean | 否 | `false` | 是否包含镜像验证信息（兼容 `include_validation`） |
 
 #### 响应示例（JSON 格式）
 
@@ -221,7 +232,7 @@ GET /api/versions/{version}/images
 #### 响应示例（YAML 格式）
 
 ```bash
-curl 'https://your-domain.com/api/versions/1.0.0/images?format=yaml'
+curl 'https://your-domain.com/api/v1/versions/1.0.0/images?format=yaml'
 ```
 
 ```yaml
@@ -236,7 +247,7 @@ worker:
 #### 包含验证信息的响应
 
 ```bash
-curl 'https://your-domain.com/api/versions/1.0.0/images?include_validation=true'
+curl 'https://your-domain.com/api/v1/versions/1.0.0/images?includeValidation=true'
 ```
 
 ```json
@@ -251,30 +262,30 @@ curl 'https://your-domain.com/api/versions/1.0.0/images?include_validation=true'
       "tag": "0.7.0",
       "targetImageName": "dify-api",
       "validation": {
-        "status": "all_found",
+        "status": "ALL_FOUND",
         "variants": [
           {
-            "name": "original",
+            "name": "ORIGINAL",
             "tag": "0.7.0",
             "image": "registry.example.com/namespace/dify-api:0.7.0",
-            "status": "found",
-            "checkedAt": "2024-01-15T10:30:00.000Z",
+            "status": "FOUND",
+            "checkTime": "2024-01-15T10:30:00.000Z",
             "httpStatus": 200
           },
           {
-            "name": "amd64",
+            "name": "AMD64",
             "tag": "0.7.0-amd64",
             "image": "registry.example.com/namespace/dify-api:0.7.0-amd64",
-            "status": "found",
-            "checkedAt": "2024-01-15T10:30:00.000Z",
+            "status": "FOUND",
+            "checkTime": "2024-01-15T10:30:00.000Z",
             "httpStatus": 200
           },
           {
-            "name": "arm64",
+            "name": "ARM64",
             "tag": "0.7.0-arm64",
             "image": "registry.example.com/namespace/dify-api:0.7.0-arm64",
-            "status": "missing",
-            "checkedAt": "2024-01-15T10:30:00.000Z",
+            "status": "MISSING",
+            "checkTime": "2024-01-15T10:30:00.000Z",
             "httpStatus": 404
           }
         ]
@@ -291,7 +302,7 @@ curl 'https://your-domain.com/api/versions/1.0.0/images?include_validation=true'
 获取指定版本的完整 `values.yaml` 文件内容。
 
 ```http
-GET /api/versions/{version}/values
+GET /api/v1/versions/{version}/values
 ```
 
 #### 响应类型
@@ -303,10 +314,10 @@ GET /api/versions/{version}/values
 
 ```bash
 # 下载 values.yaml
-curl https://your-domain.com/api/versions/1.0.0/values -o values.yaml
+curl https://your-domain.com/api/v1/versions/1.0.0/values -o values.yaml
 
 # 使用 yq 解析特定字段
-curl https://your-domain.com/api/versions/1.0.0/values | yq '.api.image.tag'
+curl https://your-domain.com/api/v1/versions/1.0.0/values | yq '.api.image.tag'
 ```
 
 ---
@@ -316,7 +327,7 @@ curl https://your-domain.com/api/versions/1.0.0/values | yq '.api.image.tag'
 获取指定版本的镜像验证数据（镜像可用性检查结果）。
 
 ```http
-GET /api/versions/{version}/validation
+GET /api/v1/versions/{version}/validation
 ```
 
 #### 响应示例
@@ -324,7 +335,7 @@ GET /api/versions/{version}/validation
 ```json
 {
   "version": "1.0.0",
-  "checkedAt": "2024-01-15T10:30:00.000Z",
+  "checkTime": "2024-01-15T10:30:00.000Z",
   "host": "registry.example.com",
   "namespace": "namespace/dify",
   "images": [
@@ -335,31 +346,31 @@ GET /api/versions/{version}/validation
       "paths": ["api"],
       "variants": [
         {
-          "name": "original",
+          "name": "ORIGINAL",
           "tag": "0.7.0",
           "image": "registry.example.com/namespace/dify-api:0.7.0",
-          "status": "found",
-          "checkedAt": "2024-01-15T10:30:00.000Z",
+          "status": "FOUND",
+          "checkTime": "2024-01-15T10:30:00.000Z",
           "httpStatus": 200
         },
         {
-          "name": "amd64",
+          "name": "AMD64",
           "tag": "0.7.0-amd64",
           "image": "registry.example.com/namespace/dify-api:0.7.0-amd64",
-          "status": "found",
-          "checkedAt": "2024-01-15T10:30:00.000Z",
+          "status": "FOUND",
+          "checkTime": "2024-01-15T10:30:00.000Z",
           "httpStatus": 200
         },
         {
-          "name": "arm64",
+          "name": "ARM64",
           "tag": "0.7.0-arm64",
           "image": "registry.example.com/namespace/dify-api:0.7.0-arm64",
-          "status": "missing",
-          "checkedAt": "2024-01-15T10:30:00.000Z",
+          "status": "MISSING",
+          "checkTime": "2024-01-15T10:30:00.000Z",
           "httpStatus": 404
         }
       ],
-      "status": "partial"
+      "status": "PARTIAL"
     }
   ]
 }
@@ -369,10 +380,10 @@ GET /api/versions/{version}/validation
 
 | 状态 | 说明 |
 |------|------|
-| `all_found` | 所有架构的镜像都可用 |
-| `partial` | 部分架构的镜像可用 |
-| `missing` | 镜像不存在 |
-| `error` | 验证过程中发生错误 |
+| `ALL_FOUND` | 所有架构的镜像都可用 |
+| `PARTIAL` | 部分架构的镜像可用 |
+| `MISSING` | 镜像不存在 |
+| `ERROR` | 验证过程中发生错误 |
 
 ---
 
@@ -383,7 +394,7 @@ GET /api/versions/{version}/validation
 ```hcl
 # 获取最新版本的镜像列表
 data "http" "dify_latest" {
-  url = "https://your-domain.com/api/versions/latest/images"
+  url = "https://your-domain.com/api/v1/versions/latest/images"
 }
 
 locals {
@@ -416,7 +427,7 @@ resource "helm_release" "dify" {
 #!/bin/bash
 # get-latest-dify.sh
 
-API_BASE="https://your-domain.com/api"
+API_BASE="https://your-domain.com/api/v1"
 
 # 获取最新版本号
 LATEST=$(curl -s "$API_BASE/versions/latest" | jq -r '.version')
@@ -435,11 +446,11 @@ echo "Downloaded values-$LATEST.yaml"
 
 # 检查镜像可用性
 VALIDATION=$(curl -s "$API_BASE/versions/$LATEST/validation")
-MISSING=$(echo "$VALIDATION" | jq '[.images[] | select(.status != "all_found")] | length')
+MISSING=$(echo "$VALIDATION" | jq '[.images[] | select(.status != "ALL_FOUND")] | length')
 
 if [ "$MISSING" -gt 0 ]; then
   echo "⚠️  Warning: $MISSING images have availability issues"
-  echo "$VALIDATION" | jq '.images[] | select(.status != "all_found") | .targetImageName'
+  echo "$VALIDATION" | jq '.images[] | select(.status != "ALL_FOUND") | .targetImageName'
 else
   echo "✅ All images are available"
 fi
@@ -452,7 +463,7 @@ fi
 import requests
 import yaml
 
-BASE_URL = "https://your-domain.com/api"
+BASE_URL = "https://your-domain.com/api/v1"
 
 def get_latest_version():
     """获取最新版本信息"""
@@ -464,7 +475,7 @@ def get_version_images(version, include_validation=False):
     """获取指定版本的镜像列表"""
     params = {}
     if include_validation:
-        params['include_validation'] = 'true'
+        params['includeValidation'] = 'true'
     
     resp = requests.get(f"{BASE_URL}/versions/{version}/images", params=params)
     resp.raise_for_status()
@@ -518,7 +529,7 @@ VALUES_FILE=${2:-values.yaml}
 echo "Updating $VALUES_FILE to Dify Helm version $VERSION"
 
 # 获取镜像列表（YAML 格式）
-curl -s "https://your-domain.com/api/versions/$VERSION/images?format=yaml" > /tmp/latest-images.yaml
+curl -s "https://your-domain.com/api/v1/versions/$VERSION/images?format=yaml" > /tmp/latest-images.yaml
 
 # 批量更新所有镜像标签
 for key in $(yq 'keys | .[]' /tmp/latest-images.yaml); do
@@ -540,13 +551,13 @@ echo "✅ Updated $VALUES_FILE"
 #### 节点 1: 检查新版本
 - **类型**: HTTP Request
 - **方法**: GET
-- **URL**: `https://your-domain.com/api/versions/latest`
+- **URL**: `https://your-domain.com/api/v1/versions/latest`
 - **输出变量**: `latest_version`
 
 #### 节点 2: 获取镜像列表
 - **类型**: HTTP Request
 - **方法**: GET
-- **URL**: `https://your-domain.com/api/versions/{{latest_version.version}}/images`
+- **URL**: `https://your-domain.com/api/v1/versions/{{latest_version.version}}/images`
 - **输出变量**: `images`
 
 #### 节点 3: 条件判断
@@ -573,7 +584,7 @@ echo "✅ Updated $VALUES_FILE"
 - name: Deploy Dify with latest Helm chart
   hosts: localhost
   vars:
-    api_base: "https://your-domain.com/api"
+    api_base: "https://your-domain.com/api/v1"
   
   tasks:
     - name: Get latest Dify Helm version
@@ -606,6 +617,145 @@ echo "✅ Updated $VALUES_FILE"
 
 ---
 
+## 系统管理端点
+
+### 7. 检查缓存状态
+
+用于检查当前缓存的完整状态，包括所有版本的元数据。
+
+```http
+GET /api/v1/cache
+```
+
+#### 响应示例
+
+```json
+{
+  "updateTime": "2024-01-15T10:30:00.000Z",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "appVersion": "0.7.0",
+      "createTime": "2024-01-15T08:00:00.000Z",
+      "chartUrl": "https://langgenius.github.io/dify-helm/dify-1.0.0.tgz",
+      "digest": "sha256:abc123...",
+      "values": {
+        "path": "helm-watchdog/values/1.0.0.yaml",
+        "url": "https://...",
+        "hash": "abc123",
+        "inline": null
+      },
+      "images": {
+        "path": "helm-watchdog/images/1.0.0.yaml",
+        "url": "https://...",
+        "hash": "def456",
+        "inline": null
+      },
+      "imageValidation": {
+        "path": "helm-watchdog/image-validation/1.0.0.json",
+        "url": "https://...",
+        "hash": "ghi789",
+        "inline": null
+      }
+    }
+  ]
+}
+```
+
+当缓存为空时：
+
+```json
+{
+  "updateTime": null,
+  "versions": []
+}
+```
+
+---
+
+### 8. 触发缓存同步 (Cron)
+
+手动触发 Helm 数据同步任务，支持流式输出同步进度。
+
+```http
+POST /api/v1/cron
+```
+
+#### Headers
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `secret` | string | 条件必填 | 当设置了 `CRON_AUTH_SECRET` 环境变量时必填（Vercel Cron 请求除外） |
+
+#### Query Parameters
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `version` | string[] | 否 | 指定要刷新的版本号，可以是逗号分隔的列表或多个参数 |
+
+#### 响应类型
+
+- **Content-Type**: `text/plain; charset=utf-8`
+- **格式**: 流式文本输出（实时日志）
+
+#### 使用示例
+
+```bash
+# 同步所有版本
+curl -X POST https://your-domain.com/api/v1/cron \
+  -H "secret: your-secret-here"
+
+# 同步指定版本
+curl -X POST "https://your-domain.com/api/v1/cron?version=1.0.0,1.0.1" \
+  -H "secret: your-secret-here"
+
+# 使用多个 version 参数
+curl -X POST "https://your-domain.com/api/v1/cron?version=1.0.0&version=1.0.1" \
+  -H "secret: your-secret-here"
+```
+
+#### 响应示例
+
+```
+== dify-helm-watchdog cron ==
+[input] force_versions=v1.0.0, v1.0.1
+[sync] Starting sync process...
+[sync] Fetched 50 versions from Helm repository
+[sync] Processing version v1.0.0...
+[sync] Downloaded values.yaml for v1.0.0
+[sync] Extracted images for v1.0.0
+[sync] Refreshed v1.0.0
+[result] processed=50 created=2 refreshed=2 skipped=48
+[result] new_versions=v1.0.2, v1.0.3
+[result] refreshed_versions=v1.0.0, v1.0.1
+[result] update_time=2024-01-15T10:30:00.000Z
+[revalidate] Triggering ISR revalidation for homepage...
+[revalidate] Successfully cleared ISR cache for homepage
+[revalidate] Warming up cache...
+[revalidate] Cache warmed up successfully (status: 200)
+[status] ok
+```
+
+#### 错误场景
+
+**401 Unauthorized** - 缺少或错误的认证令牌：
+
+```
+== dify-helm-watchdog cron ==
+[error] Invalid or missing secret header
+[status] failed
+```
+
+**500 Internal Server Error** - 缺少 Blob 存储令牌：
+
+```
+== dify-helm-watchdog cron ==
+[error] Missing required environment variable: BLOB_READ_WRITE_TOKEN
+[status] failed
+```
+
+---
+
 ## 错误处理
 
 ### 错误响应格式
@@ -614,8 +764,68 @@ echo "✅ Updated $VALUES_FILE"
 
 ```json
 {
-  "error": "Error type",
-  "message": "Detailed error message"
+  "error": "ERROR_TYPE",
+  "message": "Human-readable error message",
+  "details": [
+    {
+      "reason": "DETAILED_REASON",
+      "additionalInfo": "..."
+    }
+  ]
+}
+```
+
+#### 常见错误原因
+
+| Reason | 说明 |
+|--------|------|
+| `CACHE_NOT_INITIALIZED` | 缓存未初始化，需要先运行 cron 任务 |
+| `VERSION_NOT_FOUND` | 请求的版本不存在，`details` 中包含可用版本列表 |
+| `VALIDATION_NOT_AVAILABLE` | 该版本没有验证数据 |
+| `NO_VERSIONS_AVAILABLE` | 缓存中没有任何版本 |
+
+#### 示例错误响应
+
+**404 - 缓存未初始化**
+
+```json
+{
+  "error": "NOT_FOUND",
+  "message": "Cache not available. Trigger the cron job first.",
+  "details": [
+    {
+      "reason": "CACHE_NOT_INITIALIZED"
+    }
+  ]
+}
+```
+
+**404 - 版本不存在**
+
+```json
+{
+  "error": "NOT_FOUND",
+  "message": "Version 1.0.0 does not exist in the cache.",
+  "details": [
+    {
+      "reason": "VERSION_NOT_FOUND",
+      "availableVersions": ["1.0.1", "1.0.2", "1.0.3"]
+    }
+  ]
+}
+```
+
+**404 - 验证数据不可用**
+
+```json
+{
+  "error": "NOT_FOUND",
+  "message": "Image validation data is not available for version 1.0.0.",
+  "details": [
+    {
+      "reason": "VALIDATION_NOT_AVAILABLE"
+    }
+  ]
 }
 ```
 
@@ -624,149 +834,77 @@ echo "✅ Updated $VALUES_FILE"
 | 状态码 | 说明 |
 |--------|------|
 | `200 OK` | 请求成功 |
+| `401 Unauthorized` | 认证失败（仅 cron 端点） |
 | `404 Not Found` | 资源不存在（版本不存在或缓存未初始化） |
 | `500 Internal Server Error` | 服务器内部错误 |
 
-### 常见错误
+---
 
-#### 1. 缓存未初始化
+## 附加说明
 
-```json
-{
-  "error": "Cache not available",
-  "message": "No cached data found. Please trigger the cron job first."
-}
-```
+### 环境变量配置
 
-**解决方法**: 访问 `/api/cron` 端点触发数据同步
+#### Cron 认证
 
-#### 2. 版本不存在
+- `CRON_AUTH_SECRET`: 用于保护 `/api/v1/cron` 端点的密钥。如果未设置，则只有带有 `x-vercel-cron: true` 头的请求可以访问（Vercel 平台自动添加）。
 
-```json
-{
-  "error": "Version not found",
-  "message": "Version 1.0.0 does not exist in the cache.",
-  "availableVersions": ["0.9.0", "0.8.5", "0.8.4"]
-}
-```
+#### 缓存预热
 
-**解决方法**: 使用 `availableVersions` 中的版本号
+- `ENABLE_CACHE_WARMUP`: 设置为 `false` 可禁用 cron 任务完成后的自动缓存预热。默认为 `true`。
+- `NEXT_PUBLIC_SITE_URL`: 用于缓存预热的网站 URL。如果未设置，将使用 `VERCEL_URL` 或 `http://localhost:3000`。
 
-#### 3. 验证数据不可用
+#### Blob 存储
 
-```json
-{
-  "error": "Validation not available",
-  "message": "Image validation data is not available for version 1.0.0."
-}
-```
+- `BLOB_READ_WRITE_TOKEN`: Vercel Blob 存储的读写令牌，cron 任务需要此令牌才能存储数据。
 
-**解决方法**: 该版本可能在镜像验证功能添加之前就已缓存
+### 版本号格式
+
+API 接受的版本号格式：
+- 标准格式: `1.0.0`
+- 带 v 前缀: `v1.0.0` (会自动去除前缀)
+
+在 cron 端点中，返回的版本号始终带有 `v` 前缀以提高可读性。
+
+### 缓存机制
+
+1. **Edge 缓存**: 使用 CDN 边缘缓存，`s-maxage` 控制缓存时长
+2. **Stale-While-Revalidate**: 允许在后台更新时提供过期内容
+3. **ISR (Incremental Static Regeneration)**: 当 cron 任务完成时，会触发首页的 ISR 重新验证
+4. **缓存预热**: cron 任务完成后自动访问首页，确保用户访问时内容已经是最新的
+
+### 最佳实践
+
+1. **使用 latest 端点**: 如果总是需要最新版本，使用 `/api/v1/versions/latest` 而不是先获取列表再选择第一个
+2. **合理使用缓存**: 利用 HTTP 缓存头，避免频繁请求相同的数据
+3. **错误处理**: 始终检查 `details` 字段以获取更多错误上下文
+4. **版本验证**: 在使用 `includeValidation=true` 前，先确认该版本有验证数据（查看 `/api/v1/versions/{version}` 的 `assets` 字段）
+5. **批量操作**: 如果需要多个版本的数据，考虑使用 `/api/v1/cache` 端点获取所有元数据，然后按需请求具体内容
+
+### API 速率限制
+
+目前 API 没有硬性速率限制，但建议：
+- 遵守 HTTP 缓存头，避免不必要的请求
+- 不要频繁触发 cron 端点（建议最多每小时一次）
+- 对于生产环境，建议实现客户端缓存
+
+### Swagger/OpenAPI
+
+本项目在代码中使用了 JSDoc 风格的 Swagger 注释。你可以访问 `/swagger` 页面查看完整的 API 规范和交互式文档。
 
 ---
 
-## 缓存策略
+## 更新日志
 
-所有 API 响应都包含 HTTP 缓存头：
+### v2.0 (Current)
+- ✅ 迁移到 `/api/v1/` 路径
+- ✅ 新增 `/api/v1/cache` 端点
+- ✅ 改进错误响应格式（添加 `details` 字段）
+- ✅ cron 端点支持流式输出
+- ✅ 支持按需刷新指定版本
+- ✅ 自动缓存预热
+- ✅ 改进缓存策略
 
-```
-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
-```
-
-### 缓存参数说明
-
-- `public`: 响应可被任何缓存（浏览器、CDN）缓存
-- `s-maxage=3600`: CDN 缓存 1 小时
-- `stale-while-revalidate=86400`: 过期后 24 小时内可返回旧数据，同时后台更新
-
-### 缓存建议
-
-1. **生产环境**: 利用 HTTP 缓存减少请求
-2. **实时性要求高**: 使用 `Cache-Control: no-cache` 请求头
-3. **批量操作**: 一次性获取所需数据，避免重复请求
-
----
-
-## 性能优化建议
-
-### 1. 减少 API 调用
-
-```bash
-# ❌ 不推荐：多次调用
-curl /api/versions/1.0.0
-curl /api/versions/1.0.0/images
-curl /api/versions/1.0.0/validation
-
-# ✅ 推荐：一次性获取需要的数据
-curl '/api/versions/1.0.0/images?include_validation=true'
-```
-
-### 2. 使用合适的格式
-
-```bash
-# JSON 格式适合程序处理
-curl /api/versions/1.0.0/images
-
-# YAML 格式适合人类阅读和 yq 处理
-curl '/api/versions/1.0.0/images?format=yaml' | yq '.api.tag'
-```
-
-### 3. 利用 HTTP 缓存
-
-```python
-import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
-
-# 配置重试和缓存
-session = requests.Session()
-retry = Retry(total=3, backoff_factor=0.3)
-adapter = HTTPAdapter(max_retries=retry)
-session.mount('https://', adapter)
-
-# 复用 session
-response = session.get("https://your-domain.com/api/versions")
-```
-
----
-
-## 版本兼容性
-
-### API 版本
-
-当前 API 版本: **v1**
-
-API 遵循语义化版本控制：
-- **主版本**: 不兼容的 API 变更
-- **次版本**: 向后兼容的功能性新增
-- **修订版本**: 向后兼容的问题修正
-
-### 变更日志
-
-#### v1.0.0 (2024-01-15)
-
-- ✅ `GET /api/versions` - 列出所有版本
-- ✅ `GET /api/versions/latest` - 获取最新版本
-- ✅ `GET /api/versions/{version}` - 获取版本详情
-- ✅ `GET /api/versions/{version}/images` - 获取镜像列表
-- ✅ `GET /api/versions/{version}/values` - 获取 values.yaml
-- ✅ `GET /api/versions/{version}/validation` - 获取验证结果
-
----
-
-## 支持与反馈
-
-如有问题或建议：
-
-1. 提交 Issue 到 GitHub 仓库
-2. 查看项目 README 了解更多信息
-3. 参考现有的 API 使用示例
-
----
-
-## 相关资源
-
-- [Dify 官方文档](https://docs.dify.ai/)
-- [Dify Helm Chart 仓库](https://github.com/langgenius/dify-helm)
-- [项目 README](../README.md)
-
+### v1.0
+- 初始版本
+- 基本的版本、镜像、values 查询功能
+- 镜像验证功能

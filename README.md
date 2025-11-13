@@ -15,3 +15,6 @@
 [![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=sorphwer_dify-helm-watchdog&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=sorphwer_dify-helm-watchdog)
 
 [![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=sorphwer_dify-helm-watchdog&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=sorphwer_dify-helm-watchdog)
+
+
+Test CRON： curl -X POST http://localhost:3000/api/v1/cron -H 'secret: SECRET' -v 

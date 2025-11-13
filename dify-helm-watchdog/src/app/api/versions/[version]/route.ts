@@ -5,14 +5,14 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/versions/[version]
- * 获取指定版本的详细信息（不包含完整内容）
+ * Get detailed information for a specific version (excluding full content)
  */
 export async function GET(
   _request: Request,
-  { params }: { params: { version: string } },
+  { params }: { params: Promise<{ version: string }> },
 ) {
   try {
-    const { version } = params;
+    const { version } = await params;
 
     const cache = await loadCache();
     if (!cache) {
@@ -37,12 +37,12 @@ export async function GET(
       );
     }
 
-    // 返回版本详细信息
+    // Return version detailed information
     return NextResponse.json(
       {
         version: versionEntry.version,
         appVersion: versionEntry.appVersion ?? null,
-        createdAt: versionEntry.createdAt ?? null,
+        createTime: versionEntry.createTime ?? null,
         chartUrl: versionEntry.chartUrl,
         digest: versionEntry.digest,
         assets: {

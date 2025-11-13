@@ -3,8 +3,10 @@ import { Info, RefreshCw } from "lucide-react";
 import type {
   ImageValidationPayload,
   ImageValidationRecord,
+  ImageVariantName,
   ImageVariantStatus,
 } from "@/lib/types";
+import { countValidationStatuses } from "@/lib/validation";
 
 interface ImageValidationTableProps {
   version?: string;
@@ -16,15 +18,15 @@ interface ImageValidationTableProps {
 }
 
 const variantDotClasses: Record<ImageVariantStatus, string> = {
-  found: "bg-success",
-  missing: "bg-destructive",
-  error: "bg-warning",
+  FOUND: "bg-success",
+  MISSING: "bg-destructive",
+  ERROR: "bg-warning",
 };
 
 const variantLabels: Record<ImageVariantStatus, string> = {
-  found: "Available",
-  missing: "Missing",
-  error: "Error",
+  FOUND: "Available",
+  MISSING: "Missing",
+  ERROR: "Error",
 };
 
 const formatTimestamp = (input?: string | null) => {
@@ -44,18 +46,18 @@ const formatTimestamp = (input?: string | null) => {
 };
 
 const variantCellClasses: Record<ImageVariantStatus, string> = {
-  found: "bg-success/5 border-success/20",
-  missing: "bg-destructive/5 border-destructive/20",
-  error: "bg-warning/5 border-warning/20",
+  FOUND: "bg-success/5 border-success/20",
+  MISSING: "bg-destructive/5 border-destructive/20",
+  ERROR: "bg-warning/5 border-warning/20",
 };
 
 const variantTextClasses: Record<ImageVariantStatus, string> = {
-  found: "text-success",
-  missing: "text-destructive",
-  error: "text-warning",
+  FOUND: "text-success",
+  MISSING: "text-destructive",
+  ERROR: "text-warning",
 };
 
-const VariantCell = ({ record, name }: { record: ImageValidationRecord; name: "original" | "amd64" | "arm64" }) => {
+const VariantCell = ({ record, name }: { record: ImageValidationRecord; name: ImageVariantName }) => {
   const variant = record.variants.find((entry) => entry.name === name);
 
   if (!variant) {
@@ -70,10 +72,10 @@ const VariantCell = ({ record, name }: { record: ImageValidationRecord; name: "o
 
   // If original (multi-arch) exists and is found, treat arch-specific variants as available
   // even if -amd64/-arm64 specific tags don't exist
-  const originalVariant = record.variants.find((v) => v.name === "original");
-  const isMultiArchAvailable = originalVariant?.status === "found" && name !== "original";
-  const isOverriddenByMultiArch = isMultiArchAvailable && variant.status === "missing";
-  const effectiveStatus = isOverriddenByMultiArch ? "found" : variant.status;
+  const originalVariant = record.variants.find((v) => v.name === "ORIGINAL");
+  const isMultiArchAvailable = originalVariant?.status === "FOUND" && name !== "ORIGINAL";
+  const isOverriddenByMultiArch = isMultiArchAvailable && variant.status === "MISSING";
+  const effectiveStatus: ImageVariantStatus = isOverriddenByMultiArch ? "FOUND" : variant.status;
 
   return (
     <td className="px-4 py-3 align-top">
@@ -84,12 +86,12 @@ const VariantCell = ({ record, name }: { record: ImageValidationRecord; name: "o
             aria-hidden="true"
           />
           <span className={`font-mono text-[12px] font-semibold ${variantTextClasses[effectiveStatus]}`}>
-            {isMultiArchAvailable && variant.status === "missing" ? record.sourceTag : variant.tag}
+            {isMultiArchAvailable && variant.status === "MISSING" ? record.sourceTag : variant.tag}
           </span>
         </div>
         <span className={`text-[10px] font-semibold uppercase tracking-widest ${variantTextClasses[effectiveStatus]}`}>
-          {isMultiArchAvailable && variant.status === "missing" 
-            ? "Available (multi-arch)" 
+          {isMultiArchAvailable && variant.status === "MISSING"
+            ? "Available (multi-arch)"
             : variantLabels[effectiveStatus]}
         </span>
         {variant.error && !isMultiArchAvailable ? (
@@ -110,33 +112,14 @@ export function ImageValidationTable({
   hasAsset,
   onRetry,
 }: ImageValidationTableProps) {
-  const lastChecked = data ? formatTimestamp(data.checkedAt) : null;
+  const lastChecked = data ? formatTimestamp(data.checkTime) : null;
 
   const summary = useMemo(() => {
     if (!data) {
       return null;
     }
 
-    return data.images.reduce(
-      (acc, record) => {
-        acc.total += 1;
-        acc[record.status] += 1;
-        return acc;
-      },
-      {
-        total: 0,
-        all_found: 0,
-        partial: 0,
-        missing: 0,
-        error: 0,
-      } as {
-        total: number;
-        all_found: number;
-        partial: number;
-        missing: number;
-        error: number;
-      },
-    );
+    return countValidationStatuses(data.images);
   }, [data]);
 
   if (error) {
@@ -229,7 +212,7 @@ export function ImageValidationTable({
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-success" />
-              {summary.all_found} ok
+              {summary.allFound} ok
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-warning" />
@@ -287,9 +270,9 @@ export function ImageValidationTable({
                       </div>
                     </div>
                   </td>
-                  <VariantCell record={record} name="original" />
-                  <VariantCell record={record} name="amd64" />
-                  <VariantCell record={record} name="arm64" />
+                  <VariantCell record={record} name="ORIGINAL" />
+                  <VariantCell record={record} name="AMD64" />
+                  <VariantCell record={record} name="ARM64" />
                 </tr>
               );
             })}

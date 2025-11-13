@@ -23,4 +23,4 @@ export const DEFAULT_CODING_REGISTRY_NAMESPACE = "dify-artifact/dify";
 export const MANIFEST_ACCEPT_HEADER =
   "application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.oci.image.index.v1+json";
 
-export const IMAGE_VARIANT_NAMES = ["original", "amd64", "arm64"] as const;
+export const IMAGE_VARIANT_NAMES = ["ORIGINAL", "AMD64", "ARM64"] as const;

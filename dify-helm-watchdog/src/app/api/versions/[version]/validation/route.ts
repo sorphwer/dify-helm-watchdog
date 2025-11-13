@@ -5,14 +5,14 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/versions/[version]/validation
- * 获取指定版本的镜像验证结果
+ * Get image validation results for a specific version
  */
 export async function GET(
   _request: Request,
-  { params }: { params: { version: string } },
+  { params }: { params: Promise<{ version: string }> },
 ) {
   try {
-    const { version } = params;
+    const { version } = await params;
 
     const cache = await loadCache();
     if (!cache) {
@@ -47,7 +47,7 @@ export async function GET(
       );
     }
 
-    // 获取验证数据
+    // Fetch validation data
     let validationContent = versionEntry.imageValidation.inline;
     if (!validationContent) {
       const response = await fetch(versionEntry.imageValidation.url);

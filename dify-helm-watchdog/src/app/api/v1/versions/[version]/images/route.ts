@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { createErrorResponse, createJsonResponse, createTextResponse } from "@/lib/api/response";
 import { loadCache } from "@/lib/helm";
 import type { ImageValidationRecord } from "@/lib/types";
+import { normalizeValidationRecord } from "@/lib/validation";
 import YAML from "yaml";
 
 export const runtime = "nodejs";
@@ -14,16 +15,8 @@ interface ImageEntry extends ImageInfo {
   path: string;
   targetImageName?: string;
   validation?: {
-    status: "all_found" | "partial" | "missing" | "error";
-    variants: Array<{
-      name: "original" | "amd64" | "arm64";
-      tag: string;
-      image: string;
-      status: "found" | "missing" | "error";
-      checkedAt: string;
-      httpStatus?: number;
-      error?: string;
-    }>;
+    status: ImageValidationRecord["status"];
+    variants: ImageValidationRecord["variants"];
   };
 }
 
@@ -35,12 +28,43 @@ interface ImagesResponse {
 }
 
 /**
- * GET /api/versions/[version]/images
- * 获取指定版本中所有镜像及其标签
- * 
- * Query Parameters:
- * - format: "json" | "yaml" (default: "json")
- * - include_validation: "true" | "false" (default: "false")
+ * @swagger
+ * /api/v1/versions/{version}/images:
+ *   get:
+ *     summary: List images declared by a chart version
+ *     description: Returns container image references extracted from the Helm chart values file, optionally enriched with validation results.
+ *     tags:
+ *       - Images
+ *     parameters:
+ *       - name: version
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - name: format
+ *         in: query
+ *         description: Selects the response format, JSON by default.
+ *         schema:
+ *           type: string
+ *           enum: [json, yaml]
+ *           default: json
+ *       - name: includeValidation
+ *         in: query
+ *         description: Whether to include validation information alongside each image.
+ *         schema:
+ *           type: boolean
+ *       - name: include_validation
+ *         in: query
+ *         description: Deprecated alias of includeValidation.
+ *         schema:
+ *           type: boolean
+ *     responses:
+ *       200:
+ *         description: Image list in JSON or YAML.
+ *       404:
+ *         description: Version or cache not available.
+ *       500:
+ *         description: Internal server error.
  */
 export async function GET(
   request: Request,
@@ -50,34 +74,40 @@ export async function GET(
     const { version } = await params;
     const url = new URL(request.url);
     const format = url.searchParams.get("format") || "json";
-    const includeValidation = url.searchParams.get("include_validation") === "true";
+    const includeValidationParam =
+      url.searchParams.get("includeValidation") ??
+      url.searchParams.get("include_validation");
+    const includeValidation = includeValidationParam === "true";
 
-    // 加载缓存数据
     const cache = await loadCache();
     if (!cache) {
-      return NextResponse.json(
-        {
-          error: "Cache not available",
-          message: "No cached data found. Please trigger the cron job first.",
-        },
-        { status: 404 },
-      );
+      return createErrorResponse({
+        request,
+        status: 404,
+        message: "Cache not available. Trigger the cron job first.",
+        details: [
+          {
+            reason: "CACHE_NOT_INITIALIZED",
+          },
+        ],
+      });
     }
 
-    // 查找指定版本
     const versionEntry = cache.versions.find((v) => v.version === version);
     if (!versionEntry) {
-      return NextResponse.json(
-        {
-          error: "Version not found",
-          message: `Version ${version} does not exist in the cache.`,
-          availableVersions: cache.versions.map((v) => v.version),
-        },
-        { status: 404 },
-      );
+      return createErrorResponse({
+        request,
+        status: 404,
+        message: `Version ${version} does not exist in the cache.`,
+        details: [
+          {
+            reason: "VERSION_NOT_FOUND",
+            availableVersions: cache.versions.map((v) => v.version),
+          },
+        ],
+      });
     }
 
-    // 获取镜像数据
     let imagesText = versionEntry.images.inline;
     if (!imagesText) {
       const response = await fetch(versionEntry.images.url);
@@ -87,16 +117,9 @@ export async function GET(
       imagesText = await response.text();
     }
 
-    // 解析镜像 YAML
     const imagesData = YAML.parse(imagesText) as Record<string, ImageInfo>;
 
-    // 获取验证数据（如果需要）
-    interface ValidationDataEntry {
-      status: "all_found" | "partial" | "missing" | "error";
-      targetImageName: string;
-      variants: ImageValidationRecord["variants"];
-    }
-    let validationData: Record<string, ValidationDataEntry> | null = null;
+    let validationData: Record<string, ImageValidationRecord> | null = null;
     if (includeValidation && versionEntry.imageValidation) {
       try {
         let validationText = versionEntry.imageValidation.inline;
@@ -110,26 +133,21 @@ export async function GET(
           const validation = JSON.parse(validationText) as {
             images?: ImageValidationRecord[];
           };
-          // 创建一个映射表，方便查找
           validationData = {};
-          for (const img of validation.images || []) {
-            const key = `${img.sourceRepository}:${img.sourceTag}`;
-            validationData[key] = {
-              status: img.status,
-              targetImageName: img.targetImageName,
-              variants: img.variants,
-            };
+          for (const img of validation.images ?? []) {
+            const normalized = normalizeValidationRecord(img);
+            const key = `${normalized.sourceRepository}:${normalized.sourceTag}`;
+            validationData[key] = normalized;
           }
         }
       } catch (error) {
         console.warn(
-          `[api/versions/images] Failed to load validation data for ${version}`,
+          `[api/v1/versions/images] Failed to load validation data for ${version}`,
           error,
         );
       }
     }
 
-    // 构建响应数据
     const images: ImageEntry[] = Object.entries(imagesData).map(([path, info]) => {
       const entry: ImageEntry = {
         path,
@@ -137,7 +155,6 @@ export async function GET(
         tag: info.tag,
       };
 
-      // 添加验证信息
       if (validationData) {
         const key = `${info.repository}:${info.tag}`;
         const validation = validationData[key];
@@ -153,14 +170,14 @@ export async function GET(
       return entry;
     });
 
-    // 根据格式返回数据
     if (format === "yaml") {
-      interface YamlEntry {
+      type YamlEntry = {
         repository: string;
         tag: string;
         targetImageName?: string;
         validation?: ImageEntry["validation"];
-      }
+      };
+
       const yamlContent = YAML.stringify(
         images.reduce<Record<string, YamlEntry>>((acc, img) => {
           acc[img.path] = {
@@ -173,38 +190,37 @@ export async function GET(
         }, {}),
       );
 
-      return new Response(yamlContent, {
+      return createTextResponse(yamlContent, {
+        request,
         status: 200,
+        contentType: "application/x-yaml; charset=utf-8",
         headers: {
-          "Content-Type": "application/x-yaml; charset=utf-8",
           "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
         },
       });
     }
 
-    // JSON 格式响应
-    const response: ImagesResponse = {
+    const responseBody: ImagesResponse = {
       version: versionEntry.version,
       appVersion: versionEntry.appVersion ?? null,
       total: images.length,
       images,
     };
 
-    return NextResponse.json(response, {
-      status: 200,
+    return createJsonResponse(responseBody, {
+      request,
       headers: {
         "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
       },
     });
   } catch (error) {
-    console.error("[api/versions/images] Failed to load images", error);
-    return NextResponse.json(
-      {
-        error: "Failed to load images",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    );
+    console.error("[api/v1/versions/{version}/images] Failed to load images", error);
+    return createErrorResponse({
+      request,
+      status: 500,
+      message: error instanceof Error ? error.message : "Unknown error",
+      statusText: "INTERNAL",
+    });
   }
 }
 
