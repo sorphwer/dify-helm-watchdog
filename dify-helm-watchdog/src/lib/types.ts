@@ -16,7 +16,7 @@ export interface StoredAsset {
 export interface StoredVersion {
   version: string;
   appVersion?: string | null;
-  createdAt?: string | null;
+  createTime?: string | null;
   chartUrl: string;
   digest?: string;
   values: StoredAsset;
@@ -25,29 +25,29 @@ export interface StoredVersion {
 }
 
 export interface CachePayload {
-  lastUpdated: string;
+  updateTime: string | null;
   versions: StoredVersion[];
 }
 
-export type ImageVariantName = "original" | "amd64" | "arm64";
+export type ImageVariantName = "ORIGINAL" | "AMD64" | "ARM64";
 
-export type ImageVariantStatus = "found" | "missing" | "error";
+export type ImageVariantStatus = "FOUND" | "MISSING" | "ERROR";
 
 export interface ImageVariantCheck {
   name: ImageVariantName;
   tag: string;
   image: string;
   status: ImageVariantStatus;
-  checkedAt: string;
+  checkTime: string;
   httpStatus?: number;
   error?: string;
 }
 
 export type ImageValidationOverallStatus =
-  | "all_found"
-  | "partial"
-  | "missing"
-  | "error";
+  | "ALL_FOUND"
+  | "PARTIAL"
+  | "MISSING"
+  | "ERROR";
 
 export interface ImageValidationRecord {
   sourceRepository: string;
@@ -60,7 +60,7 @@ export interface ImageValidationRecord {
 
 export interface ImageValidationPayload {
   version: string;
-  checkedAt: string;
+  checkTime: string;
   host: string;
   namespace: string;
   images: ImageValidationRecord[];

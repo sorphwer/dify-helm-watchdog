@@ -613,7 +613,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                 Last sync
               </span>
               <span className="text-xs font-medium text-foreground">
-                {data?.lastUpdated ? formatDate(data.lastUpdated) : "pending"}
+                {data?.updateTime ? formatDate(data.updateTime) : "pending"}
               </span>
             </div>
             <ThemeToggle />
@@ -717,13 +717,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               </span>
                             )}
                           </div>
-                          {version.createdAt && (
+                          {version.createTime && (
                             <span
                               className={`mt-1 text-[9px] uppercase tracking-[0.05em] ${
                                 isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
                               }`}
                             >
-                              {formatDate(version.createdAt)}
+                              {formatDate(version.createTime)}
                             </span>
                           )}
                         </motion.button>
