@@ -140,6 +140,8 @@ const formatDate = (input?: string | null) => {
   }).format(date);
 };
 
+import { normalizeValidationPayload } from "@/lib/validation";
+
 const parseValidationPayload = (
   raw: string | undefined | null,
 ): { payload: ImageValidationPayload | null; error: string | null } => {
@@ -149,7 +151,7 @@ const parseValidationPayload = (
 
   try {
     const parsed = JSON.parse(raw) as ImageValidationPayload;
-    return { payload: parsed, error: null };
+    return { payload: normalizeValidationPayload(parsed), error: null };
   } catch (thrown) {
     return {
       payload: null,
@@ -341,32 +343,32 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         const [valuesText, imagesText, validationText] = await Promise.all([
           shouldFetchValues || isReloading
             ? fetch(version.values.url).then((response) => {
-                if (!response.ok) {
-                  throw new Error("Failed to download cached YAML artifacts");
-                }
-                return response.text();
-              })
+              if (!response.ok) {
+                throw new Error("Failed to download cached YAML artifacts");
+              }
+              return response.text();
+            })
             : Promise.resolve(version.values.inline ?? ""),
           shouldFetchImages || isReloading
             ? fetch(version.images.url).then((response) => {
-                if (!response.ok) {
-                  throw new Error("Failed to download cached YAML artifacts");
-                }
-                return response.text();
-              })
+              if (!response.ok) {
+                throw new Error("Failed to download cached YAML artifacts");
+              }
+              return response.text();
+            })
             : Promise.resolve(version.images.inline ?? ""),
           shouldFetchValidation
             ? fetch(validationAsset!.url).then((response) => {
-                if (!response.ok) {
-                  throw new Error("Failed to download image validation payload");
-                }
-                return response.text();
-              })
+              if (!response.ok) {
+                throw new Error("Failed to download image validation payload");
+              }
+              return response.text();
+            })
             : Promise.resolve(
-                typeof validationAsset?.inline === "string"
-                  ? validationAsset.inline
-                  : null,
-              ),
+              typeof validationAsset?.inline === "string"
+                ? validationAsset.inline
+                : null,
+            ),
         ]);
 
         if (!cancelled) {
@@ -589,9 +591,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               href="https://langgenius.github.io/dify-helm/#/"
               target="_blank"
               rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground ${
-                resolvedTheme === "dark" ? "text-white" : "text-primary"
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground ${resolvedTheme === "dark" ? "text-white" : "text-primary"
+                }`}
             >
               <ArrowUpRight className="h-2.5 w-2.5" />
               Dify Helm
@@ -678,40 +679,35 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                            isActive
+                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-border bg-transparent text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-foreground"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <span
-                              className={`text-base font-semibold tracking-wide ${
-                                isActive ? "text-primary-foreground" : "text-foreground"
-                              }`}
+                              className={`text-base font-semibold tracking-wide ${isActive ? "text-primary-foreground" : "text-foreground"
+                                }`}
                             >
                               v{version.version}
                             </span>
                             <span
-                              className={`text-[10px] font-mono uppercase tracking-widest ${
-                                isActive ? "text-primary-foreground/90" : "text-muted-foreground"
-                              }`}
+                              className={`text-[10px] font-mono uppercase tracking-widest ${isActive ? "text-primary-foreground/90" : "text-muted-foreground"
+                                }`}
                             >
                               sha256:{version.values.hash.slice(0, 7)}
                             </span>
                           </div>
                           <div
-                            className={`flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${
-                              isActive ? "text-primary-foreground/90" : "text-muted-foreground"
-                            }`}
+                            className={`flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${isActive ? "text-primary-foreground/90" : "text-muted-foreground"
+                              }`}
                           >
                             {version.appVersion && (
                               <span
-                                className={`rounded-full border px-2 py-0.5 ${
-                                  isActive
+                                className={`rounded-full border px-2 py-0.5 ${isActive
                                     ? "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground"
                                     : "border-border bg-muted text-muted-foreground"
-                                }`}
+                                  }`}
                               >
                                 App {version.appVersion}
                               </span>
@@ -719,9 +715,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           </div>
                           {version.createTime && (
                             <span
-                              className={`mt-1 text-[9px] uppercase tracking-[0.05em] ${
-                                isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
-                              }`}
+                              className={`mt-1 text-[9px] uppercase tracking-[0.05em] ${isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
+                                }`}
                             >
                               {formatDate(version.createTime)}
                             </span>
@@ -802,16 +797,15 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveArtifact(tab.id)}
-                      className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${
-                        isActive
+                      className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${isActive
                           ? "text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
-                      }`}
+                        }`}
                       whileHover={
                         !isActive
                           ? {
-                              scale: 1.02,
-                            }
+                            scale: 1.02,
+                          }
                           : {}
                       }
                       whileTap={{
