@@ -217,17 +217,70 @@ const sanitizeAsset = (asset: StoredAsset): StoredAsset => ({
   hash: asset.hash,
 });
 
-const sanitizeCachePayload = (payload: CachePayload): CachePayload => ({
-  lastUpdated: payload.lastUpdated,
-  versions: payload.versions.map((version) => ({
-    ...version,
-    values: sanitizeAsset(version.values),
-    images: sanitizeAsset(version.images),
-    ...(version.imageValidation
-      ? { imageValidation: sanitizeAsset(version.imageValidation) }
-      : {}),
-  })),
-});
+// Normalize timestamps to RFC 3339 format (ISO 8601) and allow null values
+const normalizeTimestamp = (value?: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+// Support legacy cache payloads that may include deprecated fields
+interface RawStoredVersion extends StoredVersion {
+  createdAt?: string | null;
+  created?: string | null;
+}
+
+interface RawCachePayload extends CachePayload {
+  lastUpdated?: string | null;
+  versions: RawStoredVersion[];
+}
+
+const sanitizeCachePayload = (payload: RawCachePayload): CachePayload => {
+  const updateTime =
+    normalizeTimestamp(payload.updateTime) ??
+    normalizeTimestamp(payload.lastUpdated) ??
+    null;
+
+  return {
+    updateTime,
+    versions: payload.versions.map((version) => {
+      const {
+        values,
+        images,
+        imageValidation,
+        createdAt,
+        created,
+        createTime,
+        ...rest
+      } = version;
+
+      const normalizedCreateTime =
+        normalizeTimestamp(createTime) ??
+        normalizeTimestamp(createdAt) ??
+        normalizeTimestamp(created) ??
+        null;
+
+      const sanitizedVersion: StoredVersion = {
+        ...rest,
+        createTime: normalizedCreateTime,
+        values: sanitizeAsset(values),
+        images: sanitizeAsset(images),
+        ...(imageValidation
+          ? { imageValidation: sanitizeAsset(imageValidation) }
+          : {}),
+      };
+
+      return sanitizedVersion;
+    }),
+  };
+};
 
 export interface SyncResult {
   processed: number;
@@ -235,7 +288,7 @@ export interface SyncResult {
   skipped: number;
   refreshed: string[];
   versions: string[];
-  lastUpdated: string;
+  updateTime: string | null;
 }
 
 export interface SyncOptions {
@@ -586,10 +639,10 @@ const resolveRegistryToken = async (
 };
 
 const createVariantTag = (variant: ImageVariantName, baseTag: string): string => {
-  if (variant === "original") {
+  if (variant === "ORIGINAL") {
     return baseTag;
   }
-  return `${baseTag}-${variant}`;
+  return `${baseTag}-${variant.toLowerCase()}`;
 };
 
 const checkRegistryImage = async (
@@ -610,16 +663,16 @@ const checkRegistryImage = async (
     response: Response,
   ): { status: ImageVariantStatus; httpStatus?: number; error?: string } => {
     if (response.ok) {
-      return { status: "found", httpStatus: response.status };
+      return { status: "FOUND", httpStatus: response.status };
     }
 
     if (response.status === 404) {
-      return { status: "missing", httpStatus: response.status };
+      return { status: "MISSING", httpStatus: response.status };
     }
 
     if (response.status === 401 || response.status === 403) {
       return {
-        status: "error",
+        status: "ERROR",
         httpStatus: response.status,
         error: "Registry denied access to this image (unauthorized).",
       };
@@ -627,14 +680,14 @@ const checkRegistryImage = async (
 
     if (response.status === 405 || response.status === 400) {
       return {
-        status: "error",
+        status: "ERROR",
         httpStatus: response.status,
         error: `Registry does not support ${response.status === 405 ? "HEAD" : "request"} for manifest lookup`,
       };
     }
 
     return {
-      status: "error",
+      status: "ERROR",
       httpStatus: response.status,
       error: `Registry responded with status ${response.status}`,
     };
@@ -683,7 +736,7 @@ const checkRegistryImage = async (
           return handleResponse(response);
         } catch (tokenError) {
           return {
-            status: "error",
+            status: "ERROR",
             httpStatus: response.status,
             error: tokenError instanceof Error
               ? `Failed to authorize registry request: ${tokenError.message}`
@@ -696,7 +749,7 @@ const checkRegistryImage = async (
     return handleResponse(response);
   } catch (error) {
     return {
-      status: "error",
+      status: "ERROR",
       error:
         error instanceof Error
           ? error.message
@@ -744,31 +797,31 @@ const determineOverallStatus = (
   const statuses = variants.map((variant) => variant.status);
   
   // If all variants are found, it's perfect
-  if (statuses.every((status) => status === "found")) {
-    return "all_found";
+  if (statuses.every((status) => status === "FOUND")) {
+    return "ALL_FOUND";
   }
 
   // If all variants are missing, no image is available
-  if (statuses.every((status) => status === "missing")) {
-    return "missing";
+  if (statuses.every((status) => status === "MISSING")) {
+    return "MISSING";
   }
 
   // If any variant has an error, report it
-  if (statuses.some((status) => status === "error")) {
-    return "error";
+  if (statuses.some((status) => status === "ERROR")) {
+    return "ERROR";
   }
 
   // For partial status: check if original (multi-arch) exists
   // Most images only publish multi-arch manifests without architecture-specific tags
   // If the original tag exists, the image is fully usable even if -amd64/-arm64 tags don't exist
-  const originalVariant = variants.find((v) => v.name === "original");
-  if (originalVariant && originalVariant.status === "found") {
+  const originalVariant = variants.find((v) => v.name === "ORIGINAL");
+  if (originalVariant && originalVariant.status === "FOUND") {
     // Original exists, so the image is usable - treat as all_found
-    return "all_found";
+    return "ALL_FOUND";
   }
 
   // Only report partial if we have some architecture-specific tags but not all
-  return "partial";
+  return "PARTIAL";
 };
 
 const computeImageValidation = async (
@@ -776,7 +829,7 @@ const computeImageValidation = async (
   entries: Array<[string, ImageEntry]>,
 ): Promise<ImageValidationPayload> => {
   const groupedEntries = dedupeImageEntries(entries);
-  const checkedAt = new Date().toISOString();
+  const checkTime = new Date().toISOString();
 
   const records: ImageValidationRecord[] = [];
 
@@ -794,7 +847,7 @@ const computeImageValidation = async (
         tag,
         image: `${CODING_REGISTRY_HOST.replace(/\/+$/, "")}/${repositoryPath}:${tag}`,
         status: result.status,
-        checkedAt,
+        checkTime,
         ...(typeof result.httpStatus === "number"
           ? { httpStatus: result.httpStatus }
           : {}),
@@ -821,7 +874,7 @@ const computeImageValidation = async (
 
   return {
     version,
-    checkedAt,
+    checkTime,
     host: CODING_REGISTRY_HOST,
     namespace: CODING_REGISTRY_NAMESPACE,
     images: records,
@@ -1065,7 +1118,7 @@ export const syncHelmData = async (
       const storedVersion: StoredVersion = {
         version: entry.version,
         appVersion: entry.appVersion,
-        createdAt: entry.created,
+        createTime: normalizeTimestamp(entry.created),
         chartUrl,
         digest: entry.digest,
         values: valuesAsset,
@@ -1110,7 +1163,7 @@ export const syncHelmData = async (
 
   const sortedVersions = sortVersions(Array.from(knownVersions.values()));
   const payload: CachePayload = {
-    lastUpdated: new Date().toISOString(),
+    updateTime: new Date().toISOString(),
     versions: sortedVersions,
   };
   const manifestDocument = sanitizeCachePayload(payload);
@@ -1152,6 +1205,6 @@ export const syncHelmData = async (
       entriesToProcess.length - newVersions.length - refreshedVersions.length,
     refreshed: refreshedVersions.map((entry) => entry.version),
     versions: newVersions.map((entry) => entry.version),
-    lastUpdated: payload.lastUpdated,
+    updateTime: manifestDocument.updateTime,
   };
 };

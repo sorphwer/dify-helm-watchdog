@@ -1,0 +1,6 @@
+---
+description: next.js api design
+alwaysApply: false
+---
+Always follow https://google.aip.dev/general
+CRON API must have authentication.

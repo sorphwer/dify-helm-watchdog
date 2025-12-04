@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { createErrorResponse } from "@/lib/api/response";
 import {
   MissingBlobTokenError,
   type SyncResult,
@@ -7,28 +8,53 @@ import {
 
 export const runtime = "nodejs";
 
+/**
+ * @swagger
+ * /api/v1/cron:
+ *   post:
+ *     summary: Trigger Helm cache synchronization
+ *     description: Starts the cron sync pipeline and streams textual progress logs. Requires a secret header when invoked outside the hosting platform.
+ *     tags:
+ *       - Cron
+ *     parameters:
+ *       - name: secret
+ *         in: header
+ *         required: false
+ *         description: Shared secret to authorize manual cron execution.
+ *         schema:
+ *           type: string
+ *       - name: version
+ *         in: query
+ *         required: false
+ *         description: One or more specific chart versions (comma separated) to refresh.
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *     responses:
+ *       200:
+ *         description: Stream containing sync logs.
+ *       401:
+ *         description: Missing or invalid cron secret.
+ *       500:
+ *         description: Internal server error.
+ */
 const createStreamResponse = (request: Request) => {
-  // Check authentication secret
   const cronSecret = process.env.CRON_AUTH_SECRET;
   const requestSecret = request.headers.get("secret");
-  
-  // Allow requests from Vercel Cron (internal requests have this header)
+
   const isVercelCron = request.headers.get("x-vercel-cron") === "true";
 
   if (cronSecret && !isVercelCron && requestSecret !== cronSecret) {
-    return new Response(
-      JSON.stringify({
-        error: "Unauthorized",
-        message: "Invalid or missing secret header",
-      }),
-      {
-        status: 401,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        },
-      }
-    );
+    return createErrorResponse({
+      request,
+      status: 401,
+      message: "Invalid or missing secret header",
+      statusText: "UNAUTHENTICATED",
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
   }
 
   const url = new URL(request.url);
@@ -50,7 +76,7 @@ const createStreamResponse = (request: Request) => {
       const write = (message: string) =>
         controller.enqueue(encoder.encode(`${message}\n`));
 
-      write("== dify-helm-watchdog cron =="); // banner
+      write("== dify-helm-watchdog cron ==");
 
       if (forceVersions.length > 0) {
         write(
@@ -63,8 +89,7 @@ const createStreamResponse = (request: Request) => {
       let statusLine = "[status] ok";
 
       try {
-        let syncResult: SyncResult | null = null;
-        syncResult = await syncHelmData({
+        const syncResult: SyncResult = await syncHelmData({
           log: (message) => write(`[sync] ${message}`),
           ...(forceVersions.length > 0 ? { forceVersions } : {}),
         });
@@ -90,17 +115,13 @@ const createStreamResponse = (request: Request) => {
         } else if (forceVersions.length > 0) {
           write("[result] no cached versions refreshed");
         }
-        write(`[result] updateTime=${syncResult.updateTime}`);
+        write(`[result] update_time=${syncResult.updateTime ?? "unknown"}`);
 
-        // Trigger ISR revalidation to rebuild the homepage with fresh data
         write("[revalidate] Triggering ISR revalidation for homepage...");
         try {
           revalidatePath("/", "page");
           write("[revalidate] Successfully cleared ISR cache for homepage");
 
-          // Optional: Pre-warm the cache by making a request to homepage
-          // This ensures the first user gets fast response instead of waiting for SSR
-          // You can disable this if revalidatePath alone works well enough
           const shouldWarmup = process.env.ENABLE_CACHE_WARMUP !== "false";
           if (shouldWarmup) {
             write("[revalidate] Warming up cache...");
@@ -110,7 +131,6 @@ const createStreamResponse = (request: Request) => {
                 : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
             try {
-              // Add a cache-busting parameter to ensure we bypass CDN caches
               const warmupUrl = `${baseUrl}/?_warmup=${Date.now()}`;
               const warmupResponse = await fetch(warmupUrl, {
                 headers: {
@@ -168,10 +188,6 @@ const createStreamResponse = (request: Request) => {
     },
   });
 };
-
-export async function GET(request: Request) {
-  return createStreamResponse(request);
-}
 
 export async function POST(request: Request) {
   return createStreamResponse(request);
