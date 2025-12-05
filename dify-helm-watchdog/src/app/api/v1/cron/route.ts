@@ -13,16 +13,12 @@ export const runtime = "nodejs";
  * /api/v1/cron:
  *   post:
  *     summary: Trigger Helm cache synchronization
- *     description: Starts the cron sync pipeline and streams textual progress logs. Requires a secret header when invoked outside the hosting platform.
+ *     description: Starts the cron sync pipeline and streams textual progress logs. Requires Bearer token authentication when invoked outside the hosting platform.
  *     tags:
  *       - Cron
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
- *       - name: secret
- *         in: header
- *         required: false
- *         description: Shared secret to authorize manual cron execution.
- *         schema:
- *           type: string
  *       - name: version
  *         in: query
  *         required: false
@@ -35,26 +31,45 @@ export const runtime = "nodejs";
  *       200:
  *         description: Stream containing sync logs.
  *       401:
- *         description: Missing or invalid cron secret.
+ *         description: Missing or invalid authorization token.
  *       500:
  *         description: Internal server error.
  */
 const createStreamResponse = (request: Request) => {
-  const cronSecret = process.env.CRON_AUTH_SECRET;
-  const requestSecret = request.headers.get("secret");
+  const cronApiKey = process.env.CRON_API_KEY;
+  const authHeader = request.headers.get("authorization");
 
   const isVercelCron = request.headers.get("x-vercel-cron") === "true";
 
-  if (cronSecret && !isVercelCron && requestSecret !== cronSecret) {
-    return createErrorResponse({
-      request,
-      status: 401,
-      message: "Invalid or missing secret header",
-      statusText: "UNAUTHENTICATED",
-      headers: {
-        "Cache-Control": "no-store",
-      },
-    });
+  // Skip auth check if no API key is configured or if it's a Vercel cron job
+  if (cronApiKey && !isVercelCron) {
+    // Validate Bearer token format
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return createErrorResponse({
+        request,
+        status: 401,
+        message: "Missing or invalid Authorization header. Expected: Bearer <token>",
+        statusText: "UNAUTHENTICATED",
+        headers: {
+          "Cache-Control": "no-store",
+          "WWW-Authenticate": 'Bearer realm="cron"',
+        },
+      });
+    }
+
+    const token = authHeader.substring(7); // Remove "Bearer " prefix
+    if (token !== cronApiKey) {
+      return createErrorResponse({
+        request,
+        status: 401,
+        message: "Invalid authorization token",
+        statusText: "UNAUTHENTICATED",
+        headers: {
+          "Cache-Control": "no-store",
+          "WWW-Authenticate": 'Bearer realm="cron", error="invalid_token"',
+        },
+      });
+    }
   }
 
   const url = new URL(request.url);
