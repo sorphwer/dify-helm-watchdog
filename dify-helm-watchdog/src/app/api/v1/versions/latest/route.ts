@@ -11,9 +11,15 @@ export const runtime = "nodejs";
  *     description: Returns convenience links to the most recent cached chart version and its related resources.
  *     tags:
  *       - Versions
+ *     parameters:
+ *       - name: versionOnly
+ *         in: query
+ *         description: When true, returns only the version string as plain text instead of the full JSON response.
+ *         schema:
+ *           type: boolean
  *     responses:
  *       200:
- *         description: Metadata about the latest chart version.
+ *         description: Metadata about the latest chart version (JSON) or version string (plain text if versionOnly=true).
  *       404:
  *         description: No cached versions available.
  *       500:
@@ -37,6 +43,20 @@ export async function GET(request: Request) {
     }
 
     const latestVersion = cache.versions[0];
+
+    // Check for versionOnly parameter
+    const url = new URL(request.url);
+    const versionOnly = url.searchParams.get("versionOnly") === "true";
+
+    if (versionOnly) {
+      return new Response(latestVersion.version, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600",
+        },
+      });
+    }
 
     const responseBody = {
       version: latestVersion.version,

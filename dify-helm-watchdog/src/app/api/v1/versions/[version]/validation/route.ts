@@ -18,6 +18,11 @@ export const runtime = "nodejs";
  *         required: true
  *         schema:
  *           type: string
+ *       - name: isMissing
+ *         in: query
+ *         description: When true, only returns images with status "MISSING".
+ *         schema:
+ *           type: boolean
  *     responses:
  *       200:
  *         description: Validation payload in JSON format.
@@ -32,6 +37,8 @@ export async function GET(
 ) {
   try {
     const { version } = await params;
+    const url = new URL(request.url);
+    const isMissing = url.searchParams.get("isMissing") === "true";
 
     const cache = await loadCache();
     if (!cache) {
@@ -87,6 +94,12 @@ export async function GET(
     const validationData = normalizeValidationPayload(
       JSON.parse(validationContent),
     );
+
+    if (isMissing) {
+      validationData.images = validationData.images.filter(
+        (img) => img.status === "MISSING",
+      );
+    }
 
     return createJsonResponse(validationData, {
       request,

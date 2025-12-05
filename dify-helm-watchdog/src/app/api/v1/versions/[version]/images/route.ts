@@ -53,11 +53,6 @@ interface ImagesResponse {
  *         description: Whether to include validation information alongside each image.
  *         schema:
  *           type: boolean
- *       - name: include_validation
- *         in: query
- *         description: Deprecated alias of includeValidation.
- *         schema:
- *           type: boolean
  *     responses:
  *       200:
  *         description: Image list in JSON or YAML.
@@ -74,10 +69,7 @@ export async function GET(
     const { version } = await params;
     const url = new URL(request.url);
     const format = url.searchParams.get("format") || "json";
-    const includeValidationParam =
-      url.searchParams.get("includeValidation") ??
-      url.searchParams.get("include_validation");
-    const includeValidation = includeValidationParam === "true";
+    const includeValidation = url.searchParams.get("includeValidation") === "true";
 
     const cache = await loadCache();
     if (!cache) {
