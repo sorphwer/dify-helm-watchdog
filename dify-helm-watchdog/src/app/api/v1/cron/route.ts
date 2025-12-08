@@ -8,6 +8,44 @@ import {
 
 export const runtime = "nodejs";
 
+// Maximum pause duration (in seconds) to prevent excessive delays and Vercel timeouts
+const MAX_PAUSE_SECONDS = parseInt(process.env.MAX_PAUSE_SECONDS || "300", 10);
+
+// Heartbeat interval during pause (in seconds) to keep the connection alive
+const HEARTBEAT_INTERVAL_SECONDS = 10;
+
+/**
+ * Sleep for a specified duration while sending periodic heartbeat messages.
+ * This is necessary for Vercel streaming responses to prevent idle connection timeouts.
+ */
+async function sleepWithHeartbeat(
+  seconds: number,
+  write: (message: string) => void,
+): Promise<void> {
+  if (seconds <= 0) return;
+
+  const totalMs = seconds * 1000;
+  const heartbeatMs = HEARTBEAT_INTERVAL_SECONDS * 1000;
+  const startTime = Date.now();
+
+  write(`[pause] Waiting ${seconds} seconds before starting sync...`);
+
+  while (Date.now() - startTime < totalMs) {
+    const remaining = Math.ceil((totalMs - (Date.now() - startTime)) / 1000);
+    if (remaining <= 0) break;
+
+    const sleepTime = Math.min(heartbeatMs, remaining * 1000);
+    await new Promise((resolve) => setTimeout(resolve, sleepTime));
+
+    const newRemaining = Math.ceil((totalMs - (Date.now() - startTime)) / 1000);
+    if (newRemaining > 0) {
+      write(`[pause] ${newRemaining}s remaining...`);
+    }
+  }
+
+  write("[pause] Wait complete, starting sync");
+}
+
 /**
  * @swagger
  * /api/v1/cron:
@@ -27,6 +65,14 @@ export const runtime = "nodejs";
  *           type: array
  *           items:
  *             type: string
+ *       - name: pause
+ *         in: query
+ *         required: false
+ *         description: Number of seconds to wait before starting the sync. Maximum is configurable via MAX_PAUSE_SECONDS env var (default 300). Heartbeat messages are sent every 10 seconds to keep the connection alive.
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *           example: 60
  *     responses:
  *       200:
  *         description: Stream containing sync logs.
@@ -85,6 +131,12 @@ const createStreamResponse = (request: Request) => {
     ),
   );
 
+  // Parse pause parameter (seconds to wait before starting sync)
+  const pauseParam = url.searchParams.get("pause");
+  const pauseSeconds = pauseParam
+    ? Math.min(Math.max(0, parseInt(pauseParam, 10) || 0), MAX_PAUSE_SECONDS)
+    : 0;
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -99,6 +151,11 @@ const createStreamResponse = (request: Request) => {
             .map((version) => `v${version}`)
             .join(", ")}`,
         );
+      }
+
+      if (pauseSeconds > 0) {
+        write(`[input] pause=${pauseSeconds}s`);
+        await sleepWithHeartbeat(pauseSeconds, write);
       }
 
       let statusLine = "[status] ok";
