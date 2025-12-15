@@ -12,25 +12,12 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
-import YAML from "yaml";
 import { CodeBlock } from "@/components/ui/code-block";
+import type { ImageTagEntry, TagChange } from "@/lib/values-wizard";
+import { applyImageTagUpdates, formatYamlError } from "@/lib/values-wizard";
 
 // Types
 type WizardStepId = 1 | 2 | 3;
-
-interface ImageTagEntry {
-  repository?: string;
-  tag?: string;
-}
-
-interface TagChange {
-  key: string;
-  path: string;
-  repository?: string;
-  oldTag: string | null;
-  newTag: string;
-  status: "updated" | "unchanged" | "missing";
-}
 
 interface ValuesWizardModalProps {
   isOpen: boolean;
@@ -46,79 +33,6 @@ const WIZARD_STEPS: Array<{ id: WizardStepId; label: string }> = [
   { id: 3, label: "Copy result" },
 ];
 
-// Helper functions
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const normalizeScalar = (value: unknown): string | null => {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return null;
-};
-
-const applyImageTagUpdates = (
-  rawYaml: string,
-  imageMap: Record<string, ImageTagEntry>,
-): { changes: TagChange[]; updatedYaml: string } => {
-  const doc = YAML.parseDocument(rawYaml);
-  if (doc.errors.length > 0) {
-    throw doc.errors[0];
-  }
-
-  const changes: TagChange[] = [];
-
-  for (const [key, entry] of Object.entries(imageMap)) {
-    if (!isRecord(entry)) {
-      continue;
-    }
-
-    const nextTag = normalizeScalar(entry.tag);
-    if (!nextTag) {
-      continue;
-    }
-
-    const segments = key.split(".");
-    const imagePath = [...segments, "image", "tag"];
-    const directPath = [...segments, "tag"];
-
-    let status: TagChange["status"] = "missing";
-    let previousValue: string | null = null;
-    let usedPath: string[] | null = null;
-
-    if (doc.hasIn(imagePath)) {
-      const current = doc.getIn(imagePath);
-      previousValue = normalizeScalar(current);
-      doc.setIn(imagePath, nextTag);
-      status = previousValue === nextTag ? "unchanged" : "updated";
-      usedPath = imagePath;
-    } else if (doc.hasIn(directPath)) {
-      const current = doc.getIn(directPath);
-      previousValue = normalizeScalar(current);
-      doc.setIn(directPath, nextTag);
-      status = previousValue === nextTag ? "unchanged" : "updated";
-      usedPath = directPath;
-    }
-
-    changes.push({
-      key,
-      path: (usedPath ?? imagePath).join("."),
-      repository: normalizeScalar(entry.repository) ?? undefined,
-      oldTag: previousValue,
-      newTag: nextTag,
-      status,
-    });
-  }
-
-  return {
-    changes,
-    updatedYaml: doc.toString(),
-  };
-};
-
 export default function ValuesWizardModal({
   isOpen,
   onClose,
@@ -129,6 +43,7 @@ export default function ValuesWizardModal({
   const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedValuesText, setUploadedValuesText] = useState<string>("");
+  const [pastedValuesText, setPastedValuesText] = useState<string>("");
   const [wizardError, setWizardError] = useState<string | null>(null);
   const [tagChanges, setTagChanges] = useState<TagChange[]>([]);
   const [updatedValuesYaml, setUpdatedValuesYaml] = useState<string>("");
@@ -143,6 +58,7 @@ export default function ValuesWizardModal({
     setWizardStep(1);
     setUploadedFileName(null);
     setUploadedValuesText("");
+    setPastedValuesText("");
     setTagChanges([]);
     setUpdatedValuesYaml("");
     setWizardError(null);
@@ -151,6 +67,38 @@ export default function ValuesWizardModal({
       fileInputRef.current.value = "";
     }
   }, []);
+
+  const processValuesText = useCallback(
+    async (text: string, fileName?: string | null) => {
+      setWizardProcessing(true);
+      setWizardError(null);
+
+      try {
+        if (!imageTagMap || Object.keys(imageTagMap).length === 0) {
+          throw new Error(
+            "Image metadata has not loaded yet for this release. Wait for the artifacts to finish syncing and try again.",
+          );
+        }
+
+        const { changes, updatedYaml } = applyImageTagUpdates(text, imageTagMap);
+
+        setUploadedFileName(fileName ?? null);
+        setUploadedValuesText(text);
+        setTagChanges(changes);
+        setUpdatedValuesYaml(updatedYaml);
+        setWizardStep(2);
+      } catch (thrown) {
+        setWizardError(formatYamlError(thrown));
+        setUploadedFileName(null);
+        setUploadedValuesText("");
+        setTagChanges([]);
+        setUpdatedValuesYaml("");
+      } finally {
+        setWizardProcessing(false);
+      }
+    },
+    [imageTagMap],
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -183,42 +131,16 @@ export default function ValuesWizardModal({
         return;
       }
 
-      setWizardProcessing(true);
-      setWizardError(null);
-
       try {
-        if (!imageTagMap || Object.keys(imageTagMap).length === 0) {
-          throw new Error(
-            "Image metadata has not loaded yet for this release. Wait for the artifacts to finish syncing and try again.",
-          );
-        }
-
         const text = await file.text();
-        const { changes, updatedYaml } = applyImageTagUpdates(text, imageTagMap);
-
-        setUploadedFileName(file.name);
-        setUploadedValuesText(text);
-        setTagChanges(changes);
-        setUpdatedValuesYaml(updatedYaml);
-        setWizardStep(2);
-      } catch (thrown) {
-        const message =
-          thrown instanceof Error
-            ? thrown.message
-            : "Failed to process the uploaded values.yaml file.";
-        setWizardError(message);
-        setUploadedFileName(null);
-        setUploadedValuesText("");
-        setTagChanges([]);
-        setUpdatedValuesYaml("");
+        await processValuesText(text, file.name);
       } finally {
-        setWizardProcessing(false);
         if (event.target) {
           event.target.value = "";
         }
       }
     },
-    [imageTagMap],
+    [processValuesText],
   );
 
   const handleWizardPrev = useCallback(() => {
@@ -233,7 +155,14 @@ export default function ValuesWizardModal({
 
     if (wizardStep === 1) {
       if (!uploadedValuesText) {
-        setWizardError("Upload a values.yaml file to continue.");
+        // If user pasted content, treat it as input and process on Next
+        if (pastedValuesText.trim().length > 0) {
+          setWizardError(null);
+          void processValuesText(pastedValuesText, null);
+          return;
+        }
+
+        setWizardError("Upload or paste a values.yaml file to continue.");
         return;
       }
       setWizardError(null);
@@ -254,7 +183,15 @@ export default function ValuesWizardModal({
     }
 
     onClose();
-  }, [onClose, updatedValuesYaml, uploadedValuesText, wizardProcessing, wizardStep]);
+  }, [
+    onClose,
+    pastedValuesText,
+    processValuesText,
+    updatedValuesYaml,
+    uploadedValuesText,
+    wizardProcessing,
+    wizardStep,
+  ]);
 
   let wizardStepBody: ReactElement;
   if (wizardStep === 1) {
@@ -270,7 +207,8 @@ export default function ValuesWizardModal({
             can rerun this helper.
           </div>
         ) : null}
-        <div className="flex flex-col items-start gap-3">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col items-start gap-3">
           <input
             ref={fileInputRef}
             type="file"
@@ -299,6 +237,35 @@ export default function ValuesWizardModal({
               Processing in your browser...
             </span>
           ) : null}
+          </div>
+
+          <div className="rounded-2xl border border-border bg-muted p-4">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Or paste your <span className="font-mono text-foreground">values.yaml</span> content
+              below (useful if file upload fails in your environment).
+            </p>
+            <textarea
+              value={pastedValuesText}
+              onChange={(event) => setPastedValuesText(event.target.value)}
+              placeholder="Paste values.yaml content here..."
+              className="custom-scrollbar h-40 w-full resize-none rounded-xl border border-border bg-card p-3 font-mono text-[12px] leading-5 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void processValuesText(pastedValuesText, null)}
+                disabled={
+                  wizardProcessing || !imageMetadataReady || pastedValuesText.trim().length === 0
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Process pasted content
+              </button>
+              <span className="text-[11px] text-muted-foreground">
+                Tip: if you see YAML errors, check indentation (tabs vs spaces).
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     );
