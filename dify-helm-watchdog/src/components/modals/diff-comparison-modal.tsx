@@ -142,7 +142,7 @@ export default function DiffComparisonModal({
           </div>
           <motion.button
             type="button"
-            onClick={() => setShowDiffOnly(!showDiffOnly)}
+            onClick={() => setShowDiffOnly((prev) => !prev)}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors whitespace-nowrap shrink-0 flex-[1] justify-center ${
