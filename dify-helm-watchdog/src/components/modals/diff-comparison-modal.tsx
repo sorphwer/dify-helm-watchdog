@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { Loader2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, X, Filter } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactDiffViewer from "react-diff-viewer";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
@@ -38,6 +38,8 @@ export default function DiffComparisonModal({
   isLoading,
   error,
 }: DiffComparisonModalProps) {
+  const [showDiffOnly, setShowDiffOnly] = useState(false);
+
   // ESC key handler
   useEffect(() => {
     if (!isOpen) {
@@ -106,9 +108,9 @@ export default function DiffComparisonModal({
           </p>
         </header>
 
-        {/* Tabs */}
-        <div className="flex items-center justify-center gap-4">
-          <div className="relative flex w-full justify-center rounded-full border border-border bg-muted p-1">
+        {/* Tabs and Filter Toggle */}
+        <div className="flex items-center gap-4">
+          <div className="relative flex flex-[9] justify-center rounded-full border border-border bg-muted p-1 min-w-0">
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
               return (
@@ -138,6 +140,21 @@ export default function DiffComparisonModal({
               );
             })}
           </div>
+          <motion.button
+            type="button"
+            onClick={() => setShowDiffOnly((prev) => !prev)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors whitespace-nowrap shrink-0 flex-[1] justify-center ${
+              showDiffOnly
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-muted text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-foreground"
+            }`}
+            aria-label={showDiffOnly ? "Show all lines" : "Show diff only"}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            <span>Diff Only</span>
+          </motion.button>
         </div>
 
         {/* Error message */}
@@ -163,16 +180,18 @@ export default function DiffComparisonModal({
           <div
             className="custom-scrollbar flex-1 overflow-auto rounded-xl bg-muted p-4 max-h-[calc(95vh-200px)]"
           >
-            <ReactDiffViewer
-              oldValue={diffContent.oldValue}
-              newValue={diffContent.newValue}
-              splitView
-              styles={diffViewerStyles}
-              useDarkTheme={theme === "dark"}
-              showDiffOnly={false}
-              leftTitle={`v${targetVersion}`}
-              rightTitle={`v${baseVersion}`}
-            />
+            <div className="min-w-fit">
+              <ReactDiffViewer
+                oldValue={diffContent.oldValue}
+                newValue={diffContent.newValue}
+                splitView
+                styles={diffViewerStyles}
+                useDarkTheme={theme === "dark"}
+                showDiffOnly={showDiffOnly}
+                leftTitle={`v${targetVersion}`}
+                rightTitle={`v${baseVersion}`}
+              />
+            </div>
           </div>
         </div>
       </motion.div>
