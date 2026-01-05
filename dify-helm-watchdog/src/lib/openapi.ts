@@ -2,6 +2,16 @@ import { createSwaggerSpec } from "next-swagger-doc";
 
 export const OPENAPI_VERSION = "3.1.0";
 
+type OpenApiSpec = {
+  servers?: Array<{ url: string }>;
+  components?: {
+    schemas?: Record<string, unknown>;
+    securitySchemes?: Record<string, unknown>;
+  };
+  // Keep it flexible: next-swagger-doc adds many other OpenAPI fields.
+  [key: string]: unknown;
+};
+
 const resolveServerUrl = (): string => {
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;
@@ -10,7 +20,7 @@ const resolveServerUrl = (): string => {
   return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 };
 
-export const buildOpenApiSpec = () => {
+export const buildOpenApiSpec = (): OpenApiSpec => {
   const spec = createSwaggerSpec({
     apiFolder: "src/app/api",
     definition: {
@@ -33,13 +43,13 @@ export const buildOpenApiSpec = () => {
         },
       },
     },
-  });
+  }) as unknown as OpenApiSpec;
 
   // Normalize shape for better compatibility with downstream tooling.
   spec.servers ??= [{ url: resolveServerUrl() }];
-  spec.components ??= {};
-  (spec.components as Record<string, unknown>).schemas ??= {};
-  (spec.components as Record<string, unknown>).securitySchemes ??= {
+  const components = (spec.components ??= {});
+  components.schemas ??= {};
+  components.securitySchemes ??= {
     bearerAuth: {
       type: "http",
       scheme: "bearer",
