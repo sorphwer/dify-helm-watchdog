@@ -291,6 +291,162 @@ curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/cron?pause=60' \
 
 ---
 
+---
+
+## MCP (Model Context Protocol) Endpoints
+
+The API also exposes MCP endpoints that allow AI models (like Claude) and MCP-compatible clients (like Dify) to interact with Helm chart data programmatically.
+
+### 9) MCP Server Info
+
+```http
+GET /api/v1/mcp
+```
+
+Returns MCP server capabilities and version information.
+
+Example:
+
+```bash
+curl 'https://dify-helm-watchdog.vercel.app/api/v1/mcp'
+```
+
+Response:
+
+```json
+{
+  "protocolVersion": "2024-11-05",
+  "serverInfo": {
+    "name": "dify-helm-watchdog",
+    "version": "1.0.0"
+  },
+  "capabilities": {
+    "tools": {},
+    "resources": {
+      "subscribe": false,
+      "listChanged": false
+    }
+  },
+  "endpoints": {
+    "sse": "/api/v1/sse",
+    "streamableHttp": "/api/v1/mcp"
+  }
+}
+```
+
+---
+
+### 10) MCP Streamable HTTP
+
+```http
+POST /api/v1/mcp
+```
+
+Processes JSON-RPC 2.0 messages according to the MCP protocol.
+
+**Available methods:**
+
+| Method | Description |
+|--------|-------------|
+| `initialize` | Initialize the MCP session |
+| `ping` | Health check |
+| `tools/list` | List available tools |
+| `tools/call` | Execute a tool |
+| `resources/list` | List available resources |
+| `resources/templates/list` | List resource templates |
+| `resources/read` | Read a resource |
+| `prompts/list` | List available prompt templates |
+| `prompts/get` | Get a prompt template with arguments |
+
+**Available tools:**
+
+| Tool | Description |
+|------|-------------|
+| `list_versions` | Lists all available Helm chart versions with optional validation statistics |
+| `get_latest_version` | Returns information about the most recent Helm chart version |
+| `get_version_details` | Returns detailed metadata for a specific Helm chart version |
+| `list_images` | Lists all container images declared in a Helm chart version |
+| `validate_images` | Returns the image validation report for a specific Helm chart version |
+
+**Available resources:**
+
+| Resource URI | Description |
+|--------------|-------------|
+| `helm://versions` | Version list |
+| `helm://versions/{version}` | Version details |
+| `helm://versions/{version}/values` | values.yaml content |
+| `helm://versions/{version}/images` | Image list |
+| `helm://versions/{version}/validation` | Validation report |
+
+**Available prompts:**
+
+| Prompt | Arguments | Description |
+|--------|-----------|-------------|
+| `update_enterprise_to_version` | `version` (required) | Guide for updating Dify Enterprise code to a specific Helm chart version. Explains how to find commit SHA for API service and release tags for other services. |
+| `analyze_missing_images` | `version` (required) | Analyze missing Docker images for a version and provide remediation steps. |
+
+Examples:
+
+```bash
+# List available tools
+curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/mcp' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# Call list_versions tool
+curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/mcp' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_versions","arguments":{"includeValidation":true}}}'
+
+# Read a resource
+curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/mcp' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"helm://versions"}}'
+
+# List available prompts
+curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/mcp' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":4,"method":"prompts/list"}'
+
+# Get enterprise update guide for version 3.7.0
+curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/mcp' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":5,"method":"prompts/get","params":{"name":"update_enterprise_to_version","arguments":{"version":"3.7.0"}}}'
+```
+
+---
+
+### 11) MCP SSE Transport
+
+```http
+GET /api/v1/sse
+```
+
+Establishes a Server-Sent Events connection for MCP communication. Returns an `endpoint` event with a POST URL for sending messages.
+
+```http
+POST /api/v1/sse?sessionId={sessionId}
+```
+
+Sends JSON-RPC messages via SSE transport. Responses are either returned inline or sent via the associated SSE stream.
+
+**Dify MCP Plugin Configuration:**
+
+To use this MCP server with Dify's MCP SSE plugin, configure it as follows:
+
+```json
+{
+  "dify-helm-watchdog": {
+    "url": "https://dify-helm-watchdog.vercel.app/api/v1/sse",
+    "headers": {},
+    "timeout": 60,
+    "sse_read_timeout": 300
+  }
+}
+```
+
+---
+
 ## Environment variables (relevant to API behavior)
 
 - `CRON_API_KEY`: Enables Bearer token protection for `/api/v1/cron`.
@@ -298,5 +454,3 @@ curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/cron?pause=60' \
 - `ENABLE_CACHE_WARMUP`: Set to `false` to disable post-sync cache warmup. Default: enabled.
 - `NEXT_PUBLIC_SITE_URL`: Used for OpenAPI `servers[0].url` and cache warmup base URL.
 - `VERCEL_URL`: Used as base URL on Vercel if present.
-
-

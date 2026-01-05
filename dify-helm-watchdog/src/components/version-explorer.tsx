@@ -5,12 +5,14 @@ import {
   ArrowUpRight,
   BookOpenText,
   CalendarClock,
+  Copy,
   FileDiff,
   FileJson,
   Info,
   Loader2,
   MapPinned,
   RefreshCw,
+  Settings2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -27,6 +29,7 @@ import { ImageValidationTable } from "@/components/image-validation-table";
 import { ThemeToggle } from "@/components/theme-toggle";
 import ValuesWizardModal from "@/components/modals/values-wizard-modal";
 import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
+import McpConfigModal from "@/components/modals/mcp-config-modal";
 
 // Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
@@ -249,6 +252,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
   // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
+
+  // MCP config modal state
+  const [mcpModalOpen, setMcpModalOpen] = useState(false);
 
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
@@ -691,6 +697,28 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               <ArrowUpRight className="h-5 w-5" />
             </span>
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setMcpModalOpen(true)}
+            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+          >
+            <div className="flex flex-col leading-tight text-left">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <Settings2 className="h-3.5 w-3.5 shrink-0" />
+                Connect
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                MCP
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                Server
+              </span>
+            </div>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <Copy className="h-5 w-5" />
+            </span>
+          </button>
         </div>
       </header>
 
@@ -983,6 +1011,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         selectedVersion={selectedVersion}
         imageTagMap={imageTagMap}
         templateValuesYaml={valuesContent}
+      />
+
+      <McpConfigModal
+        open={mcpModalOpen}
+        onOpenChange={setMcpModalOpen}
       />
     </div>
   );

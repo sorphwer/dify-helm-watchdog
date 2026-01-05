@@ -48,7 +48,7 @@ web:
       templateYaml,
       imageMap,
     );
-    const parsed = YAML.parse(updatedYaml) as any;
+    const parsed = YAML.parse(updatedYaml) as Record<string, { image: { tag: string } }>;
     expect(parsed.api.image.tag).toBe("0.11.0");
   });
 
@@ -73,7 +73,7 @@ api:
       templateYaml,
       imageMap,
     );
-    const parsed = YAML.parse(updatedYaml) as any;
+    const parsed = YAML.parse(updatedYaml) as Record<string, { image: { repository: string; tag: string } }>;
     expect(parsed.api.image.repository).toBe("example.com/custom/dify-api");
     expect(parsed.api.image.tag).toBe("0.11.0");
   });
