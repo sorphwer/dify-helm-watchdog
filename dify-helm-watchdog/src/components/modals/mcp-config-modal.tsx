@@ -16,19 +16,32 @@ interface McpConfigModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// MCP configuration for Dify SSE plugin
-const getMcpConfig = () => {
-  const baseUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "https://dify-helm-watchdog.vercel.app";
+type ConfigType = "sse" | "http";
+
+// MCP configuration generators
+const getBaseUrl = () =>
+  typeof window !== "undefined"
+    ? window.location.origin
+    : "https://dify-helm-watchdog.vercel.app";
+
+const getMcpConfigs = () => {
+  const baseUrl = getBaseUrl();
 
   return {
-    "dify-helm-watchdog": {
-      url: `${baseUrl}/api/v1/sse`,
-      headers: {},
-      timeout: 60,
-      sse_read_timeout: 300,
+    sse: {
+      "dify-helm-watchdog": {
+        url: `${baseUrl}/api/v1/sse`,
+        headers: {},
+        timeout: 60,
+        sse_read_timeout: 300,
+      },
+    },
+    http: {
+      "dify-helm-watchdog": {
+        url: `${baseUrl}/api/v1/mcp`,
+        headers: {},
+        timeout: 60,
+      },
     },
   };
 };
@@ -38,8 +51,10 @@ export default function McpConfigModal({
   onOpenChange,
 }: McpConfigModalProps) {
   const [copied, setCopied] = useState(false);
+  const [configType, setConfigType] = useState<ConfigType>("http");
 
-  const config = getMcpConfig();
+  const configs = getMcpConfigs();
+  const config = configs[configType];
   const configJson = JSON.stringify(config, null, 2);
 
   const handleCopy = useCallback(async () => {
@@ -61,14 +76,42 @@ export default function McpConfigModal({
             MCP Configuration
           </DialogTitle>
           <DialogDescription>
-            Use this configuration with Dify MCP SSE plugin or other MCP-compatible clients.
+            Use this configuration with Dify MCP plugin or other MCP-compatible clients.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Transport selector */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setConfigType("sse")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                configType === "sse"
+                  ? "border-brand bg-brand/10 text-brand"
+                  : "border-border bg-card text-muted-foreground/60 hover:bg-accent/10"
+              }`}
+            >
+              SSE Transport
+              <span className="block text-[10px] font-normal opacity-60">For persistent connections</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfigType("http")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                configType === "http"
+                  ? "border-brand bg-brand/10 text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-accent/10"
+              }`}
+            >
+              Streamable HTTP
+              <span className="block text-[10px] font-normal text-brand">✓ Recommended</span>
+            </button>
+          </div>
+
           {/* Configuration JSON */}
           <div className="relative">
-            <pre className="custom-scrollbar overflow-auto rounded-lg border border-border bg-muted/50 p-4 text-xs font-mono leading-relaxed max-h-[300px]">
+            <pre className="custom-scrollbar overflow-auto rounded-lg border border-border bg-muted/50 p-4 text-xs font-mono leading-relaxed max-h-[200px]">
               <code className="text-foreground">{configJson}</code>
             </pre>
             <Button
@@ -89,23 +132,6 @@ export default function McpConfigModal({
                 </>
               )}
             </Button>
-          </div>
-
-          {/* Endpoints info */}
-          <div className="space-y-2 text-sm">
-            <h4 className="font-medium text-foreground">Available Endpoints</h4>
-            <ul className="space-y-1 text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">/api/v1/sse</code>
-                <span>— SSE Transport</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500" />
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">/api/v1/mcp</code>
-                <span>— Streamable HTTP</span>
-              </li>
-            </ul>
           </div>
 
           {/* Available tools */}
