@@ -235,7 +235,7 @@ worker:
     expect(webImage?.validation?.status).toBe("PARTIAL");
   });
 
-  it("should support deprecated include_validation parameter", async () => {
+  it("should ignore deprecated include_validation parameter", async () => {
     mockedLoadCache.mockResolvedValueOnce({
       updateTime: "2024-01-01T00:00:00.000Z",
       versions: [
@@ -280,8 +280,9 @@ worker:
       }>;
     };
 
-    const imageWithValidation = payload.images.find((img) => img.validation);
-    expect(imageWithValidation).toBeDefined();
+    payload.images.forEach((img) => {
+      expect(img.validation).toBeUndefined();
+    });
   });
 
   it("should return images in YAML format when format=yaml", async () => {

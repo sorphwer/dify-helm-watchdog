@@ -1,22 +1,8 @@
 import { SwaggerUIWrapper } from "@/components/swagger-ui";
-import { createSwaggerSpec } from "next-swagger-doc";
-
-const buildSwaggerSpec = () =>
-  createSwaggerSpec({
-    apiFolder: "src/app/api",
-    definition: {
-      openapi: "3.0.0",
-      info: {
-        title: "dify-helm-watchdog API",
-        version: "1.0.0",
-        description:
-          "API documentation generated from Next.js route handlers using next-swagger-doc.",
-      },
-    },
-  });
+import { buildOpenApiSpec } from "@/lib/openapi";
 
 export default function SwaggerPage() {
-  const spec = buildSwaggerSpec();
+  const spec = buildOpenApiSpec();
 
   return (
     <section className="flex h-full flex-col gap-4">

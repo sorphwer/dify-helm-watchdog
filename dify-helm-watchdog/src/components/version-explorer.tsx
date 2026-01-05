@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
+  BookOpenText,
   CalendarClock,
   FileDiff,
+  FileJson,
   Info,
   Loader2,
   MapPinned,
   RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { useTheme } from "next-themes";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
 import YAML from "yaml";
@@ -138,6 +141,24 @@ const formatDate = (input?: string | null) => {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+};
+
+const formatDateParts = (
+  input?: string | null,
+): { date: string; time: string } => {
+  if (!input) {
+    return { date: "pending", time: "" };
+  }
+
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) {
+    return { date: input, time: "" };
+  }
+
+  return {
+    date: new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date),
+    time: new Intl.DateTimeFormat("en", { timeStyle: "short" }).format(date),
+  };
 };
 
 import { normalizeValidationPayload } from "@/lib/validation";
@@ -582,6 +603,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const diffActiveContent =
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
+  const lastSync = formatDateParts(data?.updateTime);
+
   return (
     <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
       <header className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -606,19 +629,68 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             version references to support your helm upgrade process.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-            <CalendarClock className={`h-4 w-4 ${resolvedTheme === "dark" ? "text-white" : "text-primary"}`} />
-            <div className="flex flex-col leading-tight">
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Last sync
-              </span>
-              <span className="text-xs font-medium text-foreground">
-                {data?.updateTime ? formatDate(data.updateTime) : "pending"}
-              </span>
+        <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-2">
+          <div className="flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col leading-tight">
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <CalendarClock
+                    className={`h-3.5 w-3.5 shrink-0 ${resolvedTheme === "dark" ? "text-white" : "text-primary"}`}
+                  />
+                  Last sync
+                </span>
+                <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                  {lastSync.date}
+                </span>
+                <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                  {lastSync.time || "\u00A0"}
+                </span>
+              </div>
             </div>
             <ThemeToggle />
           </div>
+
+          <Link
+            href="/swagger"
+            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+          >
+            <div className="flex flex-col leading-tight">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <BookOpenText className="h-3.5 w-3.5 shrink-0" />
+                Docs
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                Swagger
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                UI
+              </span>
+            </div>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ArrowUpRight className="h-5 w-5" />
+            </span>
+          </Link>
+
+          <Link
+            href="/openapi.json"
+            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+          >
+            <div className="flex flex-col leading-tight">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <FileJson className="h-3.5 w-3.5 shrink-0" />
+                Spec
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                OpenAPI
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                JSON
+              </span>
+            </div>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ArrowUpRight className="h-5 w-5" />
+            </span>
+          </Link>
         </div>
       </header>
 

@@ -24,7 +24,7 @@ describe("POST /api/v1/cron", () => {
   beforeEach(() => {
     jest.resetModules();
     process.env = { ...originalEnv };
-    delete process.env.CRON_AUTH_SECRET;
+    delete process.env.CRON_API_KEY;
     delete process.env.ENABLE_CACHE_WARMUP;
     delete process.env.VERCEL_URL;
     delete process.env.NEXT_PUBLIC_SITE_URL;
@@ -84,7 +84,7 @@ describe("POST /api/v1/cron", () => {
   });
 
   it("should return 401 when secret is required but not provided", async () => {
-    process.env.CRON_AUTH_SECRET = "my-secret-key";
+    process.env.CRON_API_KEY = "my-secret-key";
 
     const request = new Request("http://localhost/api/v1/cron", {
       method: "POST",
@@ -97,16 +97,19 @@ describe("POST /api/v1/cron", () => {
     const payload = await response.json() as {
       error: { message: string };
     };
-    expect(payload.error.message).toBe("Invalid or missing secret header");
+    expect(payload.error.message).toBe(
+      "Missing or invalid Authorization header. Expected: Bearer <token>",
+    );
+    expect(response.headers.get("WWW-Authenticate")).toBe('Bearer realm="cron"');
   });
 
   it("should return 401 when secret is incorrect", async () => {
-    process.env.CRON_AUTH_SECRET = "my-secret-key";
+    process.env.CRON_API_KEY = "my-secret-key";
 
     const request = new Request("http://localhost/api/v1/cron", {
       method: "POST",
       headers: {
-        secret: "wrong-secret",
+        authorization: "Bearer wrong-secret",
       },
     });
 
@@ -117,11 +120,12 @@ describe("POST /api/v1/cron", () => {
     const payload = await response.json() as {
       error: { message: string };
     };
-    expect(payload.error.message).toBe("Invalid or missing secret header");
+    expect(payload.error.message).toBe("Invalid authorization token");
+    expect(response.headers.get("WWW-Authenticate")).toContain('Bearer realm="cron"');
   });
 
   it("should allow request with correct secret", async () => {
-    process.env.CRON_AUTH_SECRET = "my-secret-key";
+    process.env.CRON_API_KEY = "my-secret-key";
 
     mockedSyncHelmData.mockResolvedValueOnce({
       processed: 1,
@@ -135,7 +139,7 @@ describe("POST /api/v1/cron", () => {
     const request = new Request("http://localhost/api/v1/cron", {
       method: "POST",
       headers: {
-        secret: "my-secret-key",
+        authorization: "Bearer my-secret-key",
       },
     });
 
@@ -256,7 +260,7 @@ describe("POST /api/v1/cron", () => {
 
   it("should handle MissingBlobTokenError gracefully", async () => {
     mockedSyncHelmData.mockRejectedValueOnce(
-      new MissingBlobTokenError(),
+      new MissingBlobTokenError("Blob storage token is not configured"),
     );
 
     const request = new Request("http://localhost/api/v1/cron", {
