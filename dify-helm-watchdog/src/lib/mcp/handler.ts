@@ -4,7 +4,6 @@
  */
 
 import { TOOLS, executeTool } from "./tools";
-import { RESOURCE_TEMPLATES, readResource, listResources } from "./resources";
 import { listPrompts, getPrompt } from "./prompts";
 import {
   JSON_RPC_ERRORS,
@@ -15,10 +14,7 @@ import {
   type JsonRpcResponse,
   type McpInitializeResult,
   type McpListToolsResult,
-  type McpListResourcesResult,
-  type McpListResourceTemplatesResult,
   type McpToolCallParams,
-  type McpReadResourceParams,
 } from "./types";
 
 // Types for prompts
@@ -75,10 +71,6 @@ const handleInitialize = (
     protocolVersion: MCP_PROTOCOL_VERSION,
     capabilities: {
       tools: {},
-      resources: {
-        subscribe: false,
-        listChanged: false,
-      },
       prompts: {},
     },
     serverInfo: {
@@ -133,60 +125,6 @@ const handleToolsCall = async (
       id,
       JSON_RPC_ERRORS.INTERNAL_ERROR,
       error instanceof Error ? error.message : "Tool execution failed",
-    );
-  }
-};
-
-// Handle resources/list request
-const handleResourcesList = async (
-  id: string | number | undefined,
-): Promise<JsonRpcResponse> => {
-  try {
-    const resources = await listResources();
-    const result: McpListResourcesResult = {
-      resources,
-    };
-    return createResponse(id, result);
-  } catch (error) {
-    return createErrorResponse(
-      id,
-      JSON_RPC_ERRORS.INTERNAL_ERROR,
-      error instanceof Error ? error.message : "Failed to list resources",
-    );
-  }
-};
-
-// Handle resources/templates/list request
-const handleResourceTemplatesList = (
-  id: string | number | undefined,
-): JsonRpcResponse => {
-  const result: McpListResourceTemplatesResult = {
-    resourceTemplates: RESOURCE_TEMPLATES,
-  };
-  return createResponse(id, result);
-};
-
-// Handle resources/read request
-const handleResourcesRead = async (
-  id: string | number | undefined,
-  params: McpReadResourceParams,
-): Promise<JsonRpcResponse> => {
-  if (!params?.uri) {
-    return createErrorResponse(
-      id,
-      JSON_RPC_ERRORS.INVALID_PARAMS,
-      "Missing required parameter: uri",
-    );
-  }
-
-  try {
-    const result = await readResource(params.uri);
-    return createResponse(id, result);
-  } catch (error) {
-    return createErrorResponse(
-      id,
-      JSON_RPC_ERRORS.INTERNAL_ERROR,
-      error instanceof Error ? error.message : "Failed to read resource",
     );
   }
 };
@@ -266,15 +204,6 @@ export const handleMessage = async (
 
     case "tools/call":
       return handleToolsCall(id, (params ?? {}) as unknown as McpToolCallParams);
-
-    case "resources/list":
-      return handleResourcesList(id);
-
-    case "resources/templates/list":
-      return handleResourceTemplatesList(id);
-
-    case "resources/read":
-      return handleResourcesRead(id, (params ?? {}) as unknown as McpReadResourceParams);
 
     case "prompts/list":
       return handlePromptsList(id);

@@ -53,10 +53,6 @@ export async function GET(request: Request) {
     },
     capabilities: {
       tools: {},
-      resources: {
-        subscribe: false,
-        listChanged: false,
-      },
       prompts: {},
     },
     endpoints: {
@@ -91,9 +87,6 @@ export async function GET(request: Request) {
  *       - `ping` - Health check
  *       - `tools/list` - List available tools
  *       - `tools/call` - Execute a tool
- *       - `resources/list` - List available resources
- *       - `resources/templates/list` - List resource templates
- *       - `resources/read` - Read a resource
  *       - `prompts/list` - List available prompt templates
  *       - `prompts/get` - Get a prompt template with arguments
  *     tags:
@@ -152,20 +145,6 @@ export async function GET(request: Request) {
  *                   name: list_versions
  *                   arguments:
  *                     includeValidation: true
- *             listResources:
- *               summary: List available resources
- *               value:
- *                 jsonrpc: "2.0"
- *                 id: 4
- *                 method: resources/list
- *             readResource:
- *               summary: Read a resource
- *               value:
- *                 jsonrpc: "2.0"
- *                 id: 5
- *                 method: resources/read
- *                 params:
- *                   uri: "helm://versions"
  *     responses:
  *       200:
  *         description: JSON-RPC response(s).
