@@ -14,7 +14,10 @@ import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { CodeBlock } from "@/components/ui/code-block";
 import type { ImageTagEntry, TagChange } from "@/lib/values-wizard";
-import { applyImageTagUpdates, formatYamlError } from "@/lib/values-wizard";
+import {
+  formatYamlError,
+  mergeImageOverridesIntoTemplate,
+} from "@/lib/values-wizard";
 
 // Types
 type WizardStepId = 1 | 2 | 3;
@@ -24,6 +27,7 @@ interface ValuesWizardModalProps {
   onClose: () => void;
   selectedVersion: string | null;
   imageTagMap: Record<string, ImageTagEntry> | null;
+  templateValuesYaml: string;
 }
 
 // Constants
@@ -38,6 +42,7 @@ export default function ValuesWizardModal({
   onClose,
   selectedVersion,
   imageTagMap,
+  templateValuesYaml,
 }: ValuesWizardModalProps) {
   const { resolvedTheme } = useTheme();
   const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
@@ -53,6 +58,7 @@ export default function ValuesWizardModal({
   const imageMetadataReady = Boolean(
     imageTagMap && Object.keys(imageTagMap).length > 0,
   );
+  const templateReady = templateValuesYaml.trim().length > 0;
 
   const resetWizardState = useCallback(() => {
     setWizardStep(1);
@@ -79,8 +85,17 @@ export default function ValuesWizardModal({
             "Image metadata has not loaded yet for this release. Wait for the artifacts to finish syncing and try again.",
           );
         }
+        if (!templateValuesYaml.trim()) {
+          throw new Error(
+            "Template values.yaml has not loaded yet for this release. Wait for the artifacts to finish syncing and try again.",
+          );
+        }
 
-        const { changes, updatedYaml } = applyImageTagUpdates(text, imageTagMap);
+        const { changes, updatedYaml } = mergeImageOverridesIntoTemplate(
+          text,
+          templateValuesYaml,
+          imageTagMap,
+        );
 
         setUploadedFileName(fileName ?? null);
         setUploadedValuesText(text);
@@ -97,7 +112,7 @@ export default function ValuesWizardModal({
         setWizardProcessing(false);
       }
     },
-    [imageTagMap],
+    [imageTagMap, templateValuesYaml],
   );
 
   useEffect(() => {
@@ -207,6 +222,12 @@ export default function ValuesWizardModal({
             can rerun this helper.
           </div>
         ) : null}
+        {!templateReady ? (
+          <div className="rounded-xl border border-warning bg-warning/15 px-4 py-3 text-xs font-medium text-warning">
+            Template values.yaml for this release is still syncing. Once the artifacts are ready
+            you can rerun this helper.
+          </div>
+        ) : null}
         <div className="flex flex-col gap-4">
           <div className="flex flex-col items-start gap-3">
           <input
@@ -219,7 +240,7 @@ export default function ValuesWizardModal({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={wizardProcessing || !imageMetadataReady}
+            disabled={wizardProcessing || !imageMetadataReady || !templateReady}
             className="inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FileUp className="h-4 w-4" />
@@ -255,7 +276,10 @@ export default function ValuesWizardModal({
                 type="button"
                 onClick={() => void processValuesText(pastedValuesText, null)}
                 disabled={
-                  wizardProcessing || !imageMetadataReady || pastedValuesText.trim().length === 0
+                  wizardProcessing ||
+                  !imageMetadataReady ||
+                  !templateReady ||
+                  pastedValuesText.trim().length === 0
                 }
                 className="inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -351,8 +375,8 @@ export default function ValuesWizardModal({
                     </div>
                     {isMissing ? (
                       <p className="text-xs font-medium text-warning">
-                        We could not find {change.path} in your overrides. Update it manually if
-                        needed.
+                        We could not apply {change.path} automatically due to an unexpected YAML
+                        structure. Review and update it manually if needed.
                       </p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-foreground">

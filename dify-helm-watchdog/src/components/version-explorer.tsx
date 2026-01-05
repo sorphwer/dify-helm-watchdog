@@ -982,6 +982,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         onClose={handleCloseWizard}
         selectedVersion={selectedVersion}
         imageTagMap={imageTagMap}
+        templateValuesYaml={valuesContent}
       />
     </div>
   );

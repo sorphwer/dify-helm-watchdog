@@ -47,6 +47,152 @@ export interface ApplyImageTagUpdatesResult {
   updatedYaml: string;
 }
 
+const parseYamlDocument = (rawYaml: string): YAML.Document.Parsed => {
+  const normalizedYaml = normalizeYamlInput(rawYaml);
+  const doc = YAML.parseDocument(normalizedYaml, {
+    // Be tolerant to duplicate keys in user overrides (common in hand-edited YAML).
+    uniqueKeys: false,
+  });
+  if (doc.errors.length > 0) {
+    throw doc.errors[0];
+  }
+  return doc;
+};
+
+type YamlPathSegment = string | number;
+
+const keyToYamlPathSegments = (key: string): YamlPathSegment[] =>
+  key
+    .split(".")
+    .map((segment) => (/^\d+$/.test(segment) ? Number(segment) : segment));
+
+const getScalarIn = (
+  doc: YAML.Document.Parsed,
+  path: YamlPathSegment[],
+): string | null => {
+  if (!doc.hasIn(path)) {
+    return null;
+  }
+  return normalizeScalar(doc.getIn(path));
+};
+
+const pickTagPathForTemplate = (
+  templateDoc: YAML.Document.Parsed,
+  segments: YamlPathSegment[],
+): YamlPathSegment[] => {
+  const imagePath = [...segments, "image", "tag"];
+  const directPath = [...segments, "tag"];
+  if (templateDoc.hasIn(imagePath)) {
+    return imagePath;
+  }
+  if (templateDoc.hasIn(directPath)) {
+    return directPath;
+  }
+  // Fallback to the Helm convention.
+  return imagePath;
+};
+
+const pickRepositoryPathForTemplate = (
+  templateDoc: YAML.Document.Parsed,
+  segments: YamlPathSegment[],
+): YamlPathSegment[] => {
+  const imagePath = [...segments, "image", "repository"];
+  const directPath = [...segments, "repository"];
+  if (templateDoc.hasIn(imagePath)) {
+    return imagePath;
+  }
+  if (templateDoc.hasIn(directPath)) {
+    return directPath;
+  }
+  // Fallback to the Helm convention.
+  return imagePath;
+};
+
+const findRepositoryOverride = (
+  overridesDoc: YAML.Document.Parsed,
+  segments: YamlPathSegment[],
+): string | null => {
+  const imagePath = [...segments, "image", "repository"];
+  const directPath = [...segments, "repository"];
+  return getScalarIn(overridesDoc, imagePath) ?? getScalarIn(overridesDoc, directPath);
+};
+
+/**
+ * Merge user overrides into a template values.yaml:
+ * - Always enforce the latest tag from the provided image map
+ * - Reuse the repository from user overrides if present (otherwise keep template)
+ * - Ensure missing services/paths in overrides still exist in the output by starting from template
+ */
+export const mergeImageOverridesIntoTemplate = (
+  overridesYaml: string,
+  templateYaml: string,
+  imageMap: Record<string, ImageTagEntry>,
+): ApplyImageTagUpdatesResult => {
+  const templateDoc = parseYamlDocument(templateYaml);
+  const overridesDoc = parseYamlDocument(overridesYaml);
+
+  const changes: TagChange[] = [];
+
+  for (const [key, entry] of Object.entries(imageMap)) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const nextTag = normalizeScalar(entry.tag);
+    if (!nextTag) {
+      continue;
+    }
+
+    const segments = keyToYamlPathSegments(key);
+    const tagPath = pickTagPathForTemplate(templateDoc, segments);
+    const repositoryPath = pickRepositoryPathForTemplate(templateDoc, segments);
+
+    let status: TagChange["status"] = "missing";
+    let previousTag: string | null = null;
+    let effectiveRepository: string | undefined;
+
+    try {
+      previousTag = getScalarIn(templateDoc, tagPath);
+      templateDoc.setIn(tagPath, nextTag);
+      status = previousTag === nextTag ? "unchanged" : "updated";
+
+      const overrideRepository = findRepositoryOverride(overridesDoc, segments);
+      if (overrideRepository) {
+        try {
+          templateDoc.setIn(repositoryPath, overrideRepository);
+        } catch {
+          // If repository cannot be set due to incompatible YAML structure, keep the template.
+        }
+      }
+
+      const repoFromDoc = getScalarIn(templateDoc, repositoryPath);
+      effectiveRepository =
+        repoFromDoc ?? normalizeScalar((entry as ImageTagEntry).repository) ?? undefined;
+    } catch {
+      status = "missing";
+      previousTag = getScalarIn(templateDoc, tagPath);
+      effectiveRepository =
+        getScalarIn(templateDoc, repositoryPath) ??
+        normalizeScalar((entry as ImageTagEntry).repository) ??
+        undefined;
+    }
+
+    changes.push({
+      key,
+      path: tagPath.join("."),
+      repository: effectiveRepository,
+      oldTag: previousTag,
+      newTag: nextTag,
+      status,
+    });
+  }
+
+  return {
+    changes,
+    updatedYaml: templateDoc.toString(),
+  };
+};
+
 export const applyImageTagUpdates = (
   rawYaml: string,
   imageMap: Record<string, ImageTagEntry>,

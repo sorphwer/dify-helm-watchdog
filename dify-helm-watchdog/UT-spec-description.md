@@ -5,8 +5,8 @@
 **Version:** 0.1.0
 **Testing Framework:** Jest
 **Test Environment:** Node.js
-**Total Test Files:** 9
-**Total Test Cases:** 62
+**Total Test Files:** 10
+**Total Test Cases:** 65
 
 ## Test Suite Summary
 
@@ -24,8 +24,9 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 | API v1 Version Images | `[version]/images.test.ts` | 9 | Image listing, YAML format, validation |
 | API v1 Version Values | `[version]/values.test.ts` | 7 | Values.yaml retrieval, content formats |
 | API v1 Version Validation | `[version]/validation.test.ts` | 7 | Image validation data, status checks |
-| Values Wizard | `values-wizard.test.ts` | 2 | YAML updates, normalization |
-| **Total** | **9 files** | **62** | **Comprehensive API coverage** |
+| OpenAPI Spec | `openapi.test.ts` | 1 | OpenAPI JSON generation, schema validation |
+| Values Wizard | `values-wizard.test.ts` | 4 | Template merge, repository overrides, normalization |
+| **Total** | **10 files** | **65** | **Comprehensive API coverage** |
 
 ---
 
@@ -488,23 +489,34 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 
 ### 9. Values Wizard (`src/test/values-wizard.test.ts`)
 
-**Purpose:** Tests the utility functions for YAML values manipulation and tag updates.
+**Purpose:** Tests the utility functions for merging user overrides into a new template values.yaml and enforcing image tags.
 
 #### Test Cases:
 
-1. **Image Tag Updates**
-   - **Scenario:** Update v3.5.5 values.yaml with v3.6.2 image tags
+1. **Template-based Tag Merge**
+   - **Scenario:** Merge v3.5.5 overrides into v3.6.2 template and enforce v3.6.2 image tags
    - **Expected:**
      - Returns change list with changes.length > 0
      - No missing status in changes
      - Updated YAML contains expected keys
    - **Validates:**
-     - Tag replacement logic
+     - Template-first merge behavior (missing services in overrides are still present)
+     - Tag replacement logic (always enforce the new tag)
      - Change tracking
      - YAML structure preservation
    - **Data Source:** Uses real cache files from `.cache/helm/`
 
-2. **YAML Normalization**
+2. **Missing Service Fill**
+   - **Scenario:** Overrides YAML does not include a service, template does
+   - **Expected:** Output contains the service and enforced tag from image map
+   - **Validates:** Missing service/path handling when starting from template
+
+3. **Repository Override Preservation**
+   - **Scenario:** Overrides YAML sets repository but omits tag
+   - **Expected:** Output keeps the override repository and enforces the new tag
+   - **Validates:** Repository override precedence + tag enforcement
+
+4. **YAML Normalization**
    - **Scenario:** Input with tabs and CRLF line endings
    - **Expected:**
      - Tabs converted to spaces
@@ -514,7 +526,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
      - Cross-platform compatibility
 
 **Functions Tested:**
-- `applyImageTagUpdates(valuesYaml, imageMap)`: Updates image tags in values
+- `mergeImageOverridesIntoTemplate(overridesYaml, templateYaml, imageMap)`: Merges overrides into template and enforces tags
 - `normalizeYamlInput(rawYaml)`: Normalizes YAML formatting
 
 ---
@@ -706,7 +718,7 @@ Different endpoints use different caching strategies based on data volatility:
 ### Real Data Integration
 - `values-wizard.test.ts` uses actual cache files from `.cache/helm/`
 - Tests realistic scenarios with production-like data
-- Validates real version compatibility (3.5.5 → 3.6.2)
+- Validates real version compatibility and template merge (3.5.5 overrides → 3.6.2 template)
 
 ### Synthetic Data
 - Most tests use controlled mock data
