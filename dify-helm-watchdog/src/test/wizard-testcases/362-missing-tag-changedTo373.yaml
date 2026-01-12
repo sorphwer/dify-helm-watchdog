@@ -1,0 +1,1065 @@
+# Default values for dify.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  # The edition of the application, SELF_HOSTED or CLOUD
+  edition: "SELF_HOSTED"
+  # A secret key that is used for securely signing the session cookie and encrypting sensitive information on the database. You can generate a strong key using `openssl rand -base64 42`.
+  appSecretKey: "#REPLACE_ME#"
+  # secret key for inner api calls. You can generate a strong key using `openssl rand -base64 42`.
+  innerApiKey: "UY8Qri0LOKpDO9eckiY8dvOgtJynMGaO6XikQ6J1Tjdsafon0OeBYrXW"
+  useTLS: false
+  # The backend domain of the console API, used to concatenate the authorization callback.
+  # If empty, it is the same domain. Example: console.dify.ai
+  consoleApiDomain: ""
+  # The front-end domain of the console web, used to concatenate some front-end addresses and for CORS configuration use.
+  # If empty, it is the same domain. Example: console.dify.ai
+  consoleWebDomain: ""
+  # Service API domain, used to display Service API Base Url to the front-end.
+  # If empty, it is the same domain. Example: api.dify.ai
+  serviceApiDomain: ""
+  # WebApp API backend domain, used to declare the back-end URL for the front-end API.
+  # If empty, it is the same domain. Example: app.dify.ai
+  appApiDomain: ""
+  # WebApp domain, used to display WebAPP API Base Url to the front-end. If empty, it is the same domain. Example: app.dify.ai
+  appWebDomain: ""
+  # File preview or download domain, used to display the file preview
+  # or download URL to the front-end or as a multi-modal model input;
+  # In order to prevent others from forging, the image preview URL is signed and has a 5-minute expiration time.
+  filesDomain: ""
+  # Enterprise service domain, used to declare the back-end URL for the front-end API.
+  enterpriseDomain: ""
+  # Trigger service domain, used by API and workers for trigger functionality.
+  # If empty, trigger functionality may not work properly. Example: trigger.dify.ai
+  triggerDomain: ""
+  # When enabled, migrations will be executed prior to application startup and the application will start after the migrations have completed.
+  dbMigrationEnabled: true
+  rag:
+    # RAG ETL type, support: dify or Unstructured
+    etlType: "dify"
+    keywordDataSourceType: "object_storage"
+    # The maximum number of top-k value for RAG.
+    topKMaxValue: 10
+    # Configuration for document chunk length. It is used to control the size of text segments when processing long documents.
+    indexingMaxSegmentationTokensLength: 4000
+  integrations:
+    notion:
+      # Notion import configuration, support public and internal
+      integrationType: "internal"
+      clientId: ""
+      clientSecret: ""
+      internalSecret: ""
+  marketplace:
+    enabled: true
+    url: "https://marketplace.dify.ai"
+    apiUrl: "https://marketplace.dify.ai"
+
+ingress:
+  enabled: false
+  # Use the IP address as the host name, which is used to access the service through the IP address.
+  # ! Only support non-enterprise version !
+  useIpAsHost: false
+  className: ""
+  annotations: {} # kubernetes.io/tls-acme: "true"
+  tls: []
+
+api:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-api
+    repository: example.com/custom/dify-api
+    # override appVersion in Chart.yaml if not empty
+    tag: "70571b53ad9d2d9d1ba0108731a2a94ea74df558"
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /health
+      port: 5001
+      scheme: HTTP
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 3
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /health
+      port: 5001
+      scheme: HTTP
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 3
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  deployEnv: "PRODUCTION"
+  webApiCorsAllowOrigins: "*"
+  consoleCorsAllowOrigins: "*"
+  serverWorkerAmount: 1
+  checkUpdateUrl: "https://updates.dify.ai"
+  innerApi:
+    enabled: true
+  oauth:
+    redirectPath: "/console/api/oauth/authorize"
+    github:
+      clientId: ""
+      clientSecret: ""
+    google:
+      clientId: ""
+      clientSecret: ""
+  db:
+    poolSize: 250
+    poolRecycle: 3600
+  limits:
+    # upload file size limit in MB
+    uploadFileSize: 15
+    # upload file batch count limit
+    uploadFileBatchCount: 5
+    # upload image file size limit in MB
+    uploadImageFileSize: 5
+  sentry:
+    enabled: false
+    dsn: ""
+    tracesSampleRate: 1.0
+    profilesSampleRate: 1.0
+  positionTool:
+    pins: ""
+    includes: ""
+    excludes: ""
+  positionProvider:
+    pins: ""
+    includes: ""
+    excludes: ""
+
+worker:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-api
+    repository: example.com/custom/dify-api
+    # override appVersion in Chart.yaml if not empty
+    tag: "70571b53ad9d2d9d1ba0108731a2a94ea74df558"
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe: {}
+  livenessProbe: {}
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  celeryWorkerAmount: 1
+  db:
+    poolSize: 250
+    poolRecycle: 3600
+  sentry:
+    enabled: false
+    dsn: ""
+    tracesSampleRate: 1.0
+    profilesSampleRate: 1.0
+
+triggerWorker:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-api
+    repository: langgenius/dify-api
+    # override appVersion in Chart.yaml if not empty
+    tag: "70571b53ad9d2d9d1ba0108731a2a94ea74df558"
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe: {}
+  livenessProbe: {}
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  celeryWorkerAmount: 1
+  db:
+    poolSize: 250
+    poolRecycle: 3600
+  sentry:
+    enabled: false
+    dsn: ""
+    tracesSampleRate: 1.0
+    profilesSampleRate: 1.0
+  code:
+    # Sandbox execution-related limits for trigger worker
+    maxStringArrayLength: 500
+    maxObjectArrayLength: 500
+    maxNumberArrayLength: 500
+
+workerBeat:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-api
+    repository: langgenius/dify-api
+    # override appVersion in Chart.yaml if not empty
+    tag: "70571b53ad9d2d9d1ba0108731a2a94ea74df558"
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe: {}
+  livenessProbe: {}
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  db:
+    poolSize: 30
+    poolRecycle: 3600
+  enableWorkflowLogCleanup: false
+
+web:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-web
+    repository: example.com/custom/dify-web
+    # override appVersion in Chart.yaml if not empty
+    tag: "70571b53ad9d2d9d1ba0108731a2a94ea74df558"
+  logoConfig:
+    enabled: false
+    image:
+      repository: busybox
+      tag: "1.36.1"
+    faviconIcoBase64: ""
+    logoSitePngBase64: ""
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe:
+    initialDelaySeconds: 3
+    failureThreshold: 3
+    periodSeconds: 10
+    successThreshold: 1
+    tcpSocket:
+      port: 3000
+    timeoutSeconds: 1
+  livenessProbe:
+    failureThreshold: 3
+    periodSeconds: 10
+    successThreshold: 1
+    tcpSocket:
+      port: 3000
+    timeoutSeconds: 1
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  sentry:
+    enabled: false
+    dsn: ""
+    tracesSampleRate: 1.0
+    profilesSampleRate: 1.0
+
+sandbox:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-sandbox
+    repository: example.com/custom/dify-sandbox
+    tag: "0.2.12"
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe:
+    failureThreshold: 60
+    initialDelaySeconds: 3
+    periodSeconds: 3
+    successThreshold: 1
+    tcpSocket:
+      port: 8194
+    timeoutSeconds: 3
+  livenessProbe:
+    failureThreshold: 3
+    periodSeconds: 3
+    successThreshold: 1
+    tcpSocket:
+      port: 8194
+    timeoutSeconds: 1
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  maxWorkers: 4
+  maxRequests: 50
+  workerTimeout: 15
+  pythonRequirements: |
+    # The requirements.txt file content
+    # For example:
+    # fastapi==0.104.1
+    # pydantic==2.5.1
+
+enterprise:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-enterprise
+    repository: langgenius/dify-enterprise
+    tag: "0.14.2"
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /v1/healthz
+      port: 8082
+      scheme: HTTP
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 3
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /v1/healthz
+      port: 8082
+      scheme: HTTP
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 3
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  appSecretKey: "#REPLACE_ME#"
+  adminAPIsSecretKeySalt: "#REPLACE_ME#"
+  innerApi:
+    enabled: true
+  serviceAccountName: "dify-enterprise"
+  licenseMode: "online"
+  licenseServer: "https://licenses.dify.ai/server"
+  consoleSSOSkipCertVerify: false
+  webSSOSkipCertVerify: false
+  dashboardSSOSkipCertVerify: false
+  serverTimeout: "60s"
+  grpcServerTimeout: "60s"
+  workspaceSyncCron: "*/5 * * * *"
+  workspaceSyncTimeout: "30s"
+  # Base64 encoded 32-byte AES-256 key for encrypting password policy. You can generate a strong key using `openssl rand -base64 32`.
+  passwordEncryptionKey: "xHBzZKP288fiIUdCkYJW5Px/16kCqkJucXue6x/97eo="
+
+enterpriseAudit:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-audit
+    repository: langgenius/dify-audit
+    tag: "0.14.2"
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /v1/healthz
+      port: 8083
+      scheme: HTTP
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 3
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /v1/healthz
+      port: 8083
+      scheme: HTTP
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 3
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  scheduler:
+    solidifyCheckCron: "0 0 */1 * *" # minutes hours day-of-month month day-of-week
+    solidifyDelayDays: 90
+    timeout: "600s"
+  mq:
+    checkInterval: "5s"
+    syncThreshold: 200
+    maxWait: "10s"
+  serverTimeout: "60s"
+  grpcServerTimeout: "60s"
+  downloadTimeout: "60s"
+
+enterpriseFrontend:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-enterprise-frontend
+    repository: langgenius/dify-enterprise-frontend
+    tag: "0.14.1"
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe:
+    initialDelaySeconds: 3
+    failureThreshold: 3
+    periodSeconds: 10
+    successThreshold: 1
+    tcpSocket:
+      port: 3000
+    timeoutSeconds: 1
+  livenessProbe:
+    failureThreshold: 3
+    periodSeconds: 10
+    successThreshold: 1
+    tcpSocket:
+      port: 3000
+    timeoutSeconds: 1
+  extraEnv:
+    # Apply your own Environment Variables if necessary. Below is demo.
+    # extraEnv:
+    #   - name: ENV_FROM_COMMUNITY1
+    #     value: env123
+    #   - name: ENV_FROM_COMMUNITY2
+    #     value: env123
+
+ssrfProxy:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/squid
+    repository: ubuntu/squid
+    tag: "6.13-25.04_beta"
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe: {}
+  livenessProbe: {}
+  # Custom sandbox host for squid reverse proxy. Leave empty to use default (recommended).
+  # Example for full FQDN: "my-release-dify-sandbox-svc.my-namespace.svc.cluster.local"
+  sandboxHost: ""
+  extraEnv: # Apply your own Environment Variables if necessary. Below is demo.
+
+  # extraEnv:
+  #   - name: ENV_FROM_COMMUNITY1
+  #     value: env123
+  #   - name: ENV_FROM_COMMUNITY2
+  #     value: env123
+  squidConf: |
+    acl localnet src 0.0.0.1-0.255.255.255	# RFC 1122 "this" network (LAN)
+    acl localnet src 10.0.0.0/8		# RFC 1918 local private network (LAN)
+    acl localnet src 100.64.0.0/10		# RFC 6598 shared address space (CGN)
+    acl localnet src 169.254.0.0/16 	# RFC 3927 link-local (directly plugged) machines
+    acl localnet src 172.16.0.0/12		# RFC 1918 local private network (LAN)
+    acl localnet src 192.168.0.0/16		# RFC 1918 local private network (LAN)
+    acl localnet src fc00::/7       	# RFC 4193 local private network range
+    acl localnet src fe80::/10      	# RFC 4291 link-local (directly plugged) machines
+    acl SSL_ports port 443
+    acl Safe_ports port 80		# http
+    acl Safe_ports port 21		# ftp
+    acl Safe_ports port 443		# https
+    acl Safe_ports port 70		# gopher
+    acl Safe_ports port 210		# wais
+    acl Safe_ports port 1025-65535	# unregistered ports
+    acl Safe_ports port 280		# http-mgmt
+    acl Safe_ports port 488		# gss-http
+    acl Safe_ports port 591		# filemaker
+    acl Safe_ports port 777		# multiling http
+    acl CONNECT method CONNECT
+    http_access deny !Safe_ports
+    http_access deny CONNECT !SSL_ports
+    http_access allow localhost manager
+    http_access deny manager
+    http_access allow localhost
+    include /etc/squid/conf.d/*.conf
+    http_access deny all
+
+    ################################## Proxy Server ################################
+    http_port 3128
+    coredump_dir /var/spool/squid
+    refresh_pattern ^ftp:		1440	20%	10080
+    refresh_pattern ^gopher:	1440	0%	1440
+    refresh_pattern -i (/cgi-bin/|\?) 0	0%	0
+    refresh_pattern \/(Packages|Sources)(|\.bz2|\.gz|\.xz)$ 0 0% 0 refresh-ims
+    refresh_pattern \/Release(|\.gpg)$ 0 0% 0 refresh-ims
+    refresh_pattern \/InRelease$ 0 0% 0 refresh-ims
+    refresh_pattern \/(Translation-.*)(|\.bz2|\.gz|\.xz)$ 0 0% 0 refresh-ims
+    refresh_pattern .		0	20%	4320
+
+    # upstream proxy, set to your own upstream proxy IP to avoid SSRF attacks
+    # ====== using the upstream proxy to access the internet without any authentication ======
+    # cache_peer 127.0.0.1 parent 3128 0 no-query default
+    # never_direct allow all
+    # ====== using the upstream proxy to access the internet with authentication ======
+    # cache_peer 172.1.1.1 parent 3128 0 no-query default login=your-username:your-password
+    # never_direct allow all
+
+    ################################## Reverse Proxy To Sandbox ################################
+    http_port 8194 accel vhost
+    cache_peer {{ .Values.ssrfProxy.sandboxHost | default (printf "%s-sandbox-svc" (include "dify.fullname" .)) }} parent 8194 0 no-query originserver
+    acl src_all src all
+    http_access allow src_all
+
+unstructured:
+  enabled: true
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/unstructured-api
+    repository: downloads.unstructured.io/unstructured-io/unstructured-api
+    tag: "0.0.70"
+  replicas: 1
+  resources: {}
+  serviceAccountName: ""
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  readinessProbe: {}
+  livenessProbe: {}
+  # unstructured_api_key:{ }
+  # Use the api key only if you are trying to access .ppt document analyze service provided by unstructured.io
+  extraEnv:
+    # Apply your own Environment Variables if necessary. Below is demo.
+    # extraEnv:
+    #   - name: ENV_FROM_COMMUNITY1
+    #     value: env123
+    #   - name: ENV_FROM_COMMUNITY2
+    #     value: env123
+
+plugin_daemon:
+  enabled: true
+  replicas: 1
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-plugin-daemon
+    repository: langgenius/dify-plugin-daemon
+    tag: 0.5.0-serverless
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  maxLaunchSeconds: 3600
+  forceVerifyingSignature: false
+  # NodePort / LoadBalancer
+  serviceType: "NodePort"
+  # loadbalancer or node ip
+  remoteInstallHost: "127.0.0.1"
+  remoteInstallPort: "5003"
+  pluginExecuteTimeout: "360"
+  adminApiEnabled: true
+
+plugin_controller:
+  replicas: 1
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/enterprise_plugin-crd
+    repository: langgenius/enterprise_plugin-crd
+    tag: 0.14.2
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
+plugin_connector:
+  replicas: 1
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/enterprise_plugin-connector
+    repository: langgenius/enterprise_plugin-connector
+    tag: 0.14.2
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  securityContext: {}
+  labels: {}
+  maxWaitSeconds: 3600
+  customServiceAccount: ""
+  runnerServiceAccount: ""
+  # If your image repo is not using https protocol, set this to true.
+  insecureImageRepo: false
+  imageRepoSecret: "image-repo-secret"
+  imageRepoPrefix: "docker.io/your-image-repo-prefix"
+  # imageRepoType: docker / ecr
+  imageRepoType: docker
+  ecrRegion: "us-east-1"
+  # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/nginx:1.27.3
+  gatewayImage: "nginx:1.27.3"
+  # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/executor:latest
+  shaderImage: "gcr.io/kaniko-project/executor:latest"
+  # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/busybox:latest
+  busyBoxImage: "busybox:latest"
+  awsCliImage: "amazon/aws-cli:latest"
+  # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/plugin-build-base-python:3.13
+  # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/plugin-build-base-python:3.12
+  # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/plugin-build-base-python:3.11
+  # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/plugin-build-base-python:3.10
+  builderName: "kaniko"
+  pluginResourceLimits:
+    cpu: 1000m
+    memory: 3000Mi
+    ephemeralStorage: 5Gi
+  pluginResourceRequests:
+    cpu: 100m
+    memory: 50Mi
+    ephemeralStorage: 5Gi
+  # Enable secure mode for plugin connector
+  secure: false
+  # GitHub builder configuration
+  github:
+    authMethod: "auto"
+    accessToken: ""
+    repoName: "your-repo-name"
+    actionFileName: "build.yml"
+    branch: "main"
+    imagePrefix: "docker.io/your-image-repo-prefix"
+    orgName: "your-org-name"
+    shaderImage: "gcr.io/kaniko-project/executor:latest"
+    app:
+      enabled: false
+      appId: "0"
+      installationId: "0"
+      # Name of the file inside the pre-created Secret
+      privateKeySecretKey: "app.pem"
+  generatorConf: |
+    generator:
+      repo: langgenius
+      python:
+        pipMirror: ""
+        preCompile: true
+        versions:
+          python3.13:
+            langgenius: docker.io/langgenius/plugin-build-base-python:3.13
+          python3.12:
+            langgenius: docker.io/langgenius/plugin-build-base-python:3.12
+          python3.11:
+            langgenius: docker.io/langgenius/plugin-build-base-python:3.11
+          python3.10:
+            langgenius: docker.io/langgenius/plugin-build-base-python:3.10
+
+gateway:
+  replicas: 1
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/enterprise_gateway
+    repository: langgenius/enterprise_gateway
+    tag: 0.14.2
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
+  # Caddy reverse proxy transport timeouts
+  transport:
+    dialTimeout: "30s"
+    keepalive: "30s"
+    keepaliveInterval: "30s"
+
+  # additional origins to allow CORS requests from
+  # if left empty, only dify domains will be allowed
+  allowOrigins:
+    - http://localhost:3000
+    - http://localhost:3001
+    - http://localhost:5001
+    - http://localhost:3002
+
+plugin_manager:
+  enabled: true
+  replicas: 1
+  image:
+    # g-hsod9681-docker.pkg.coding.net/dify-artifact/dify/dify-plugin-manager
+    repository: langgenius/dify-plugin-manager
+    tag: "0.14.2"
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  serverTimeout: "60s"
+  grpcServerTimeout: "60s"
+
+  # Metric source is used for plugin resource (cpu, memory, network i/o) monitoring.
+  # can be one of following values:
+  # - disabled: no metrics will be collected
+  # - cadvisor: metrics will be collected from cadvisor, this requires **cluster roles** of reading nodes and nodes/proxy.
+  #   the metrics will be stored in a local **ephemeral** tsdb.
+  # - (recommended) prometheus: metrics will be queried from prometheus
+  #   make sure externalPrometheus is enabled and configured correctly.
+  #
+  # following metrics are required: see https://kubernetes.io/docs/reference/instrumentation/metrics/
+  # - container_cpu_usage_seconds_total
+  # - container_memory_working_set_bytes
+  # - container_network_receive_bytes_total
+  # - container_network_transmit_bytes_total
+  metric:
+    source: "disabled"
+    # used for cadvisor metric source
+    scrape:
+      retainPeriod: 604800s
+      tsdbBlockSizeLimitBytes: 536870912
+      scrapeTimeout: 10s
+      scrapeInterval: 20s
+      tmpDir: /tmp
+
+# You can visit https://github.com/minio/minio/blob/43a74029685512ce9b1b76c053d48b43fc8d64fc/helm/minio/values.yaml for more details about MinIO configuration.
+minio:
+  rootUser: minioadmin
+  # The root password for the MinIO server. You can generate a strong password using `openssl rand -base64 32`.
+  rootPassword: NzGG+ngHuwz0xzMQ1XFt8JYCAxdrhnQ8/93LCggMt00=
+  replicas: 1
+  mode: standalone
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2048Mi
+    requests:
+      cpu: 500m
+      memory: 1024Mi
+  persistence:
+    enabled: false
+
+###################################
+# Persistence Configration
+###################################
+persistence:
+  # The storage type support: local, s3, azure-blob, aliyun-oss, google-storage, tencent-cos volcengine-tos huawei-obs
+  type: "local"
+  local:
+    mountPath: "/app/api/storage"
+    annotations:
+      helm.sh/resource-policy: keep
+    persistentVolumeClaim:
+      existingClaim: ""
+      hostPath: "/data/dify"
+      ## Dify App Data Persistent Volume Storage Class
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ##   set, choosing the default provisioner.
+      ## ReadWriteMany access mode required for `api` and `worker`
+      ##
+      storageClass:
+      accessModes: ReadWriteMany
+      size: 5Gi
+      subPath: ""
+  s3:
+    endpoint: "https://xxx.r2.cloudflarestorage.com"
+    accessKey: "#REPLACE_ME#"
+    secretKey: "#REPLACE_ME#"
+    region: "us-east-1"
+    bucketName: "your-bucket-name"
+    addressType: ""
+    useAwsManagedIam: false
+    useAwsS3: true
+  azureBlob:
+    accountName: ""
+    accountKey: ""
+    containerName: ""
+    accountUrl: ""
+    # Optional Azure EndpointSuffix, e.g. "core.windows.net" or "core.chinacloudapi.cn"
+    endpointSuffix: ""
+  aliyunOss:
+    endpoint: "your-endpoint"
+    bucketName: "your-bucket-name"
+    accessKey: "#REPLACE_ME#"
+    secretKey: "#REPLACE_ME#"
+    region: "ap-southeast-1"
+  googleStorage:
+    bucketName: "your-bucket-name"
+    # The service account JSON key file content, base64 encoded
+    serviceAccountJson: ""
+  tencentCos:
+    bucketName: "your-bucket-name"
+    region: ""
+    secretId: "#REPLACE_ME"
+    secretKey: "#REPLACE_ME"
+    scheme: "https"
+  huaweiObs:
+    server: "your-server-url"
+    bucketName: "your-bucket-name"
+    accessKey: "#REPLACE_ME#"
+    secretKey: "#REPLACE_ME#"
+  volcengineTos:
+    bucketName: "your-bucket-name"
+    accessKey: "#REPLACE_ME#"
+    secretKey: "#REPLACE_ME#"
+    endpoint: "tos-endpoint"
+    region: "your-region"
+
+###################################
+# Mail Configuration
+###################################
+mail:
+  # Mail configuration, support: resend, smtp
+  type: ""
+  # default email sender from email address, if not not given specific address
+  defaultSender: "YOUR EMAIL FROM (eg: no-reply <no-reply@dify.ai>)"
+  # the api-key for resend (https://resend.com)
+  resend:
+    apiKey: ""
+    apiUrl: https://api.resend.com
+  smtp:
+    server: ""
+    port: 587
+    username: ""
+    password: ""
+    useTLS: false
+
+###################################
+# External postgres
+###################################
+externalPostgres:
+  enabled: false
+  address: localhost
+  port: 5432
+  credentials:
+    dify:
+      database: "dify"
+      username: "postgres"
+      password: "#REPLACE_ME#"
+      sslmode: "require"
+      # extras: "options=-c search_path=your-schema -c your-other-option=xxx"
+      extras: ""
+      charset: ""
+      uriScheme: "postgresql"
+    plugin_daemon:
+      database: "dify_plugin_daemon"
+      username: "postgres"
+      password: "#REPLACE_ME#"
+      sslmode: "require"
+      # extras: "options=-c search_path=your-schema -c your-other-option=xxx"
+      extras: ""
+      charset: ""
+      uriScheme: "postgresql"
+    enterprise:
+      database: "enterprise"
+      username: "postgres"
+      password: "#REPLACE_ME#"
+      sslmode: "require"
+      # extras: "options=-c search_path=your-schema -c your-other-option=xxx"
+      extras: ""
+      charset: ""
+      uriScheme: "postgresql"
+    audit:
+      database: "audit"
+      username: "postgres"
+      password: "#REPLACE_ME#"
+      sslmode: "require"
+      # extras: "options=-c search_path=your-schema -c your-other-option=xxx"
+      extras: ""
+      charset: ""
+      uriScheme: "postgresql"
+postgresql:
+  enabled: false
+  name: postgres
+  image:
+    repository: langgenius/postgresql
+    registry: docker.io
+  global:
+    storageClass: ""
+    postgresql:
+      auth:
+        postgresPassword: "#REPLACE_ME#"
+        database: "dify"
+  #        username: ""
+  #        password: ""
+  primary:
+    initdb:
+      scripts:
+        my_init_script.sh: |
+          #!/bin/bash
+          set -e
+          echo "Creating database..."
+          PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U postgres << 'EOF'
+          SELECT 'CREATE DATABASE enterprise' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'enterprise')\gexec
+          SELECT 'CREATE DATABASE audit' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'audit')\gexec
+          EOF
+
+###################################
+# External Redis
+###################################
+externalRedis:
+  enabled: true
+  useSSL: false
+
+  host: "redis.example"
+  port: 6379
+  username: ""
+  password: "#REPLACE_ME#"
+  db: 0
+
+  sentinel:
+    enabled: false
+    nodes: "" # Comma-separated list of Redis Sentinel nodes (host:port)
+    serviceName: "" # Name of the Redis Sentinel service to monitor
+    username: ""
+    password: "#REPLACE_ME#"
+    socketTimeout: 0.1 # Socket timeout in seconds for Redis Sentinel connections
+
+  cluster:
+    enabled: false
+    nodes: "#REPLACE_ME#" # Comma-separated list of Redis Clusters nodes (host:port)
+    password: "#REPLACE_ME#"
+
+redis:
+  enabled: false
+  image:
+    repository: langgenius/redis
+    registry: docker.io
+    tag: 6.2.16-debian-12-r3
+  global:
+    redis:
+      password: "#REPLACE_ME#"
+
+###################################
+# vectorDB
+###################################
+vectorDB:
+  useExternal: true
+  # The type of vector database, support: weaviate, qdrant, milvus, relyt (pgvectors), pgvecto-rs, tencent, opensearch, elasticsearch, analyticdb, lindorm
+  # For more details, please refer to the documentation: https://github.com/langgenius/dify/blob/main/api/core/rag/datasource/vdb/vector_type.py
+  externalType: "qdrant"
+  externalWeaviate:
+    endpoint: "http://weaviate:8080"
+    apiKey: "#REPLACE_ME#"
+  # External Qdrant
+  externalQdrant:
+    endpoint: "http://your-qdrant-cluster-url.qdrant.tech/"
+    apiKey: "#REPLACE_ME#"
+  # External Milvus
+  externalMilvus:
+    # URI for connecting to the Milvus server (e.g., 'http://localhost:19530' or 'https://milvus-instance.example.com:19530')
+    uri: "http://127.0.0.1:19530"
+    token: ""
+    user: ""
+    password: ""
+    database: "default"
+  externalRelyt:
+    host: "your-relyt.domain"
+    port: 5431
+    user: "postgres"
+    password: "#REPLACE_ME#"
+    database: "pgvectors"
+  externalPgVectoRS:
+    host: "your-pgvectors.domain"
+    port: 5432
+    user: "postgres"
+    password: "#REPLACE_ME#"
+    database: "pgvectors"
+  externalTencentVectorDB:
+    host: "your-tencent-vector-db.domain"
+    apiKey: "#REPLACE_ME#"
+    timeout: 30
+    username: "tencent"
+    password: "#REPLACE_ME#"
+    shard: 1
+    replicas: 2
+    database: "tencent"
+  externalOpenSearch:
+    host: "your-opensearch.domain"
+    port: 9200
+    user: ""
+    password: "#REPLACE_ME#"
+    useTLS: false
+  externalElasticsearch:
+    host: "127.0.0.1"
+    port: 9200
+    username: "elastic"
+    password: "#REPLACE_ME#"
+  externalAnalyticDB:
+    keyID: "#REPLACE_ME#"
+    keySecret: "#REPLACE_ME#"
+    regionID: "#REPLACE_ME#"
+    instanceID: "#REPLACE_ME#"
+    account: "#REPLACE_ME#"
+    password: "#REPLACE_ME#"
+    host: "#REPLACE_ME#"
+    port: 5432
+    namespace: ""
+    namespacePassword: ""
+    minConnection: 1
+    maxConnection: 5
+  externalLindorm:
+    url: "http://localhost:30070"
+    username: "admin"
+    password: "admin"
+    indexType: "hnsw"
+    distanceType: "l2"
+    usingUgc: true
+    queryTimeout: 2.0
+qdrant:
+  enabled: false
+  replicaCount: 3
+  image:
+    repository: langgenius/qdrant
+    pullPolicy: IfNotPresent
+    tag: "v1.7.3"
+  apiKey: "dify123456"
+  persistence:
+    accessModes: [ "ReadWriteOnce" ]
+    size: 10Gi
+  resources: {}
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+weaviate:
+  enabled: false
+
+imagePullSecrets: []
+
+###################################
+# External Prometheus
+###################################
+externalPrometheus:
+  # provide a prometheus for plugin metrics monitoring
+  # otherwise, the plugin manager requires a cluster role to collect metrics
+  enabled: false
+  endpoint: "http://prometheus:9090"
+  timeout: 10s
+  username: ""
+  password: ""
+  insecure: true

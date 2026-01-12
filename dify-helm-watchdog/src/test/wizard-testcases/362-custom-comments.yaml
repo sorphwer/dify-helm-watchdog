@@ -1,0 +1,45 @@
+# =====================================================
+# Custom Production Configuration for Dify Helm Chart
+# Created: 2024-01-15
+# Author: DevOps Team
+# =====================================================
+
+# Global settings with custom comments
+global:
+  edition: "SELF_HOSTED"  # Using self-hosted edition
+  # IMPORTANT: Replace with production secret
+  appSecretKey: "#REPLACE_ME#"
+
+# API Service Configuration
+# Using private registry for security compliance
+api:
+  enabled: true
+  image:
+    # Private registry hosted on internal infrastructure
+    repository: registry.internal.example.com/dify/dify-api
+    # Pinned to tested version for stability
+    tag: "v1.0.0-stable"
+  replicas: 3  # Production replica count
+
+# Worker Service - same image as API
+worker:
+  enabled: true
+  image:
+    # Same private registry as API
+    repository: registry.internal.example.com/dify/dify-api
+    tag: "v1.0.0-stable"
+
+# Web Frontend
+web:
+  enabled: true
+  image:
+    repository: registry.internal.example.com/dify/dify-web
+    # Web version may differ from API
+    tag: "v1.0.0-web"
+
+# Sandbox for code execution
+sandbox:
+  enabled: true
+  image:
+    repository: registry.internal.example.com/dify/dify-sandbox
+    tag: "0.2.10-patched"  # Custom patched version

@@ -1,0 +1,14 @@
+# Test variant: missing tag field
+# User configuration only specifies custom repositories, no tag overrides
+api:
+  image:
+    repository: example.com/custom/dify-api
+worker:
+  image:
+    repository: example.com/custom/dify-api
+web:
+  image:
+    repository: example.com/custom/dify-web
+sandbox:
+  image:
+    repository: example.com/custom/dify-sandbox

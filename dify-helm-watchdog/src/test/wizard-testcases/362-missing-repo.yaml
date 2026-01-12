@@ -1,0 +1,14 @@
+# Test variant: missing repository field
+# User configuration only specifies tags, no repository overrides
+api:
+  image:
+    tag: "custom-api-tag-v1"
+worker:
+  image:
+    tag: "custom-worker-tag-v1"
+web:
+  image:
+    tag: "custom-web-tag-v1"
+sandbox:
+  image:
+    tag: "custom-sandbox-v1"

@@ -1,0 +1,57 @@
+api:
+  repository: langgenius/dify-api
+  tag: 70571b53ad9d2d9d1ba0108731a2a94ea74df558
+enterprise:
+  repository: langgenius/dify-enterprise
+  tag: 0.14.2
+enterpriseAudit:
+  repository: langgenius/dify-audit
+  tag: 0.14.2
+enterpriseFrontend:
+  repository: langgenius/dify-enterprise-frontend
+  tag: 0.14.1
+gateway:
+  repository: langgenius/enterprise_gateway
+  tag: 0.14.2
+plugin_connector:
+  repository: langgenius/enterprise_plugin-connector
+  tag: 0.14.2
+plugin_controller:
+  repository: langgenius/enterprise_plugin-crd
+  tag: 0.14.2
+plugin_daemon:
+  repository: langgenius/dify-plugin-daemon
+  tag: 0.5.0-serverless
+plugin_manager:
+  repository: langgenius/dify-plugin-manager
+  tag: 0.14.2
+qdrant:
+  repository: langgenius/qdrant
+  tag: v1.7.3
+redis:
+  repository: langgenius/redis
+  tag: 6.2.16-debian-12-r3
+sandbox:
+  repository: langgenius/dify-sandbox
+  tag: 0.2.12
+ssrfProxy:
+  repository: ubuntu/squid
+  tag: 6.13-25.04_beta
+triggerWorker:
+  repository: langgenius/dify-api
+  tag: 70571b53ad9d2d9d1ba0108731a2a94ea74df558
+unstructured:
+  repository: downloads.unstructured.io/unstructured-io/unstructured-api
+  tag: 0.0.70
+web:
+  repository: langgenius/dify-web
+  tag: 70571b53ad9d2d9d1ba0108731a2a94ea74df558
+web.logoConfig:
+  repository: busybox
+  tag: 1.36.1
+worker:
+  repository: langgenius/dify-api
+  tag: 70571b53ad9d2d9d1ba0108731a2a94ea74df558
+workerBeat:
+  repository: langgenius/dify-api
+  tag: 70571b53ad9d2d9d1ba0108731a2a94ea74df558
