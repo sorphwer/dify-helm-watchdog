@@ -12,6 +12,7 @@ import {
   Loader2,
   MapPinned,
   RefreshCw,
+  ScrollText,
   Settings2,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -30,6 +31,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import ValuesWizardModal from "@/components/modals/values-wizard-modal";
 import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
 import McpConfigModal from "@/components/modals/mcp-config-modal";
+import WorkflowLogsModal from "@/components/modals/workflow-logs-modal";
 
 // Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
@@ -255,6 +257,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
   // MCP config modal state
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
+
+  // Workflow logs modal state
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
 
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
@@ -620,8 +625,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               href="https://langgenius.github.io/dify-helm/#/"
               target="_blank"
               rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground ${resolvedTheme === "dark" ? "text-white" : "text-primary"
-                }`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-foreground transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground"
             >
               <ArrowUpRight className="h-2.5 w-2.5" />
               Dify Helm
@@ -636,25 +640,27 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-2">
-          <div className="flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col leading-tight">
-                <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  <CalendarClock
-                    className={`h-3.5 w-3.5 shrink-0 ${resolvedTheme === "dark" ? "text-white" : "text-primary"}`}
-                  />
-                  Last sync
-                </span>
-                <span className="text-xs font-medium text-foreground whitespace-nowrap">
-                  {lastSync.date}
-                </span>
-                <span className="text-xs font-medium text-foreground whitespace-nowrap">
-                  {lastSync.time || "\u00A0"}
-                </span>
-              </div>
+          <button
+            type="button"
+            onClick={() => setLogsModalOpen(true)}
+            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+          >
+            <div className="flex flex-col items-start leading-tight">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                Last sync
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap text-left">
+                {lastSync.date}
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap text-left">
+                {lastSync.time || "\u00A0"}
+              </span>
             </div>
-            <ThemeToggle />
-          </div>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ScrollText className="h-5 w-5" />
+            </span>
+          </button>
 
           <Link
             href="/swagger"
@@ -719,6 +725,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               <Copy className="h-5 w-5" />
             </span>
           </button>
+
+          <div className="flex min-h-[64px] items-center justify-center rounded-xl border border-border bg-card px-3 py-3">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -1016,6 +1026,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       <McpConfigModal
         open={mcpModalOpen}
         onOpenChange={setMcpModalOpen}
+      />
+
+      <WorkflowLogsModal
+        open={logsModalOpen}
+        onOpenChange={setLogsModalOpen}
       />
     </div>
   );

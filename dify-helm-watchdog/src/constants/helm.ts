@@ -8,6 +8,7 @@ export const CACHE_PATH = `${STORAGE_PREFIX}/cache.json`;
 export const VALUES_PREFIX = `${STORAGE_PREFIX}/values`;
 export const IMAGES_PREFIX = `${STORAGE_PREFIX}/images`;
 export const IMAGE_VALIDATION_PREFIX = `${STORAGE_PREFIX}/image-validation`;
+export const WORKFLOW_LOGS_PATH = `${STORAGE_PREFIX}/workflow-logs.json`;
 
 // Local cache paths - using relative paths for consistency
 // Note: These will be resolved to absolute paths using path.join(process.cwd(), ...) where needed
