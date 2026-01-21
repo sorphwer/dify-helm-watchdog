@@ -6,7 +6,7 @@
 **Testing Framework:** Jest
 **Test Environment:** Node.js
 **Total Test Files:** 10
-**Total Test Cases:** 65
+**Total Test Cases:** 71
 
 ## Test Suite Summary
 
@@ -25,8 +25,8 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 | API v1 Version Values | `[version]/values.test.ts` | 7 | Values.yaml retrieval, content formats |
 | API v1 Version Validation | `[version]/validation.test.ts` | 7 | Image validation data, status checks |
 | OpenAPI Spec | `openapi.test.ts` | 1 | OpenAPI JSON generation, schema validation |
-| Values Wizard | `values-wizard.test.ts` | 4 | Template merge, repository overrides, normalization |
-| **Total** | **10 files** | **65** | **Comprehensive API coverage** |
+| Values Wizard | `values-wizard.test.ts` | 10 | Official values upgrade, comment preservation, edge cases |
+| **Total** | **10 files** | **71** | **Comprehensive API coverage** |
 
 ---
 
@@ -525,6 +525,26 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
      - Indentation normalization
      - Cross-platform compatibility
 
+5. **Official Lower-Version Values Upgrade**
+   - **Scenario:** Use official v3.7.3 values.yaml with custom overrides and comments, upgrade to v3.7.4
+   - **Expected:** Output is full values.yaml with tags replaced and repositories preserved
+   - **Validates:** Comment preservation in output, full template coverage
+
+6. **Numeric Tag Quoting**
+   - **Scenario:** applyImageTagUpdates receives numeric-looking tag values (e.g., 1.0)
+   - **Expected:** Output tags remain quoted strings
+   - **Validates:** Tag serialization preserves string format
+
+7. **Tab-indented Normalization**
+   - **Scenario:** Input uses tabs for indentation
+   - **Expected:** Tabs normalized and YAML parses correctly
+   - **Validates:** normalizeYamlInput handles tab indentation
+
+8. **Direct Tag Update Utility**
+   - **Scenario:** applyImageTagUpdates updates tag paths in-place
+   - **Expected:** Tag values updated for image.tag and direct tag paths
+   - **Validates:** Utility function behavior independent of templates
+
 **Functions Tested:**
 - `mergeImageOverridesIntoTemplate(overridesYaml, templateYaml, imageMap)`: Merges overrides into template and enforces tags
 - `normalizeYamlInput(rawYaml)`: Normalizes YAML formatting
@@ -802,7 +822,7 @@ PASS src/test/values-wizard.test.ts
 PASS src/test/api/v1/versions/[version]/validation.test.ts
 
 Test Suites: 9 passed, 9 total
-Tests:       62 passed, 62 total
+Tests:       71 passed, 71 total
 Snapshots:   0 total
 Time:        ~0.3s
 ```

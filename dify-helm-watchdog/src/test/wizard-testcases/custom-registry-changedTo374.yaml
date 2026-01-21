@@ -1,0 +1,24 @@
+api:
+  image:
+    repository: registry.internal.example.com/dify/dify-api
+    tag: "c0c64c75d6c7ef5c273a49aec38adbc7cb952cb4"
+web:
+  image:
+    repository: langgenius/dify-web
+    tag: "c0c64c75d6c7ef5c273a49aec38adbc7cb952cb4"
+  logoConfig:
+    image:
+      repository: busybox
+      tag: "1.36.1"
+sandbox:
+  image:
+    repository: registry.internal.example.com/dify/dify-sandbox
+    tag: "0.2.12"
+enterprise:
+  image:
+    repository: langgenius/dify-enterprise
+    tag: "0.14.3"
+numericTagExample:
+  image:
+    repository: example/numeric
+    tag: "1.0"

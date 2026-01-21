@@ -27,6 +27,54 @@ const normalizeScalar = (value: unknown): string | null => {
   return null;
 };
 
+const setQuotedScalar = (
+  doc: YAML.Document.Parsed,
+  path: YamlPathSegment[],
+  value: string,
+): void => {
+  const existingNode = doc.getIn(path, true);
+  if (existingNode && YAML.isScalar(existingNode)) {
+    existingNode.value = value;
+    existingNode.type = "QUOTE_DOUBLE";
+    return;
+  }
+  const tagNode = new YAML.Scalar(value);
+  tagNode.type = "QUOTE_DOUBLE";
+  doc.setIn(path, tagNode);
+};
+
+const mergeMissingFromTemplate = (
+  templateNode: YAML.Node | null | undefined,
+  targetNode: YAML.Node | null | undefined,
+): void => {
+  if (!templateNode || !targetNode) {
+    return;
+  }
+  if (YAML.isMap(templateNode) && YAML.isMap(targetNode)) {
+    for (const entry of templateNode.items) {
+      const key =
+        entry.key && YAML.isScalar(entry.key) ? entry.key.value : (entry.key as unknown);
+      const targetValue = targetNode.get(key as string | number | undefined, true);
+      if (typeof targetValue === "undefined") {
+        targetNode.set(key as string | number, entry.value);
+      } else if (entry.value) {
+        mergeMissingFromTemplate(entry.value as YAML.Node, targetValue as YAML.Node);
+      }
+    }
+    return;
+  }
+  if (YAML.isSeq(templateNode) && YAML.isSeq(targetNode)) {
+    templateNode.items.forEach((item, index) => {
+      const existing = targetNode.items[index];
+      if (!existing) {
+        targetNode.items[index] = item;
+      } else {
+        mergeMissingFromTemplate(item as YAML.Node, existing as YAML.Node);
+      }
+    });
+  }
+};
+
 /**
  * Normalize user-provided YAML text so it's more likely to parse consistently across editors/OSes.
  * - Remove UTF-8 BOM
@@ -37,9 +85,7 @@ export const normalizeYamlInput = (raw: string): string => {
   const withoutBom = raw.replace(/^\uFEFF/, "");
   const normalizedNewlines = withoutBom.replace(/\r\n/g, "\n");
   // Only replace indentation tabs at the beginning of a line (tabs inside block scalars are valid).
-  return normalizedNewlines.replace(/^\t+(?=\S)/gm, (tabs) =>
-    "  ".repeat(tabs.length),
-  );
+  return normalizedNewlines.replace(/^\t+/gm, (tabs) => "  ".repeat(tabs.length));
 };
 
 export interface ApplyImageTagUpdatesResult {
@@ -130,6 +176,13 @@ export const mergeImageOverridesIntoTemplate = (
 ): ApplyImageTagUpdatesResult => {
   const templateDoc = parseYamlDocument(templateYaml);
   const overridesDoc = parseYamlDocument(overridesYaml);
+  const outputDoc = overridesDoc;
+
+  if (!outputDoc.contents) {
+    outputDoc.contents = templateDoc.contents;
+  } else {
+    mergeMissingFromTemplate(templateDoc.contents, outputDoc.contents);
+  }
 
   const changes: TagChange[] = [];
 
@@ -152,27 +205,27 @@ export const mergeImageOverridesIntoTemplate = (
     let effectiveRepository: string | undefined;
 
     try {
-      previousTag = getScalarIn(templateDoc, tagPath);
-      templateDoc.setIn(tagPath, nextTag);
+      previousTag = getScalarIn(outputDoc, tagPath);
+      setQuotedScalar(outputDoc, tagPath, nextTag);
       status = previousTag === nextTag ? "unchanged" : "updated";
 
       const overrideRepository = findRepositoryOverride(overridesDoc, segments);
       if (overrideRepository) {
         try {
-          templateDoc.setIn(repositoryPath, overrideRepository);
+          outputDoc.setIn(repositoryPath, overrideRepository);
         } catch {
           // If repository cannot be set due to incompatible YAML structure, keep the template.
         }
       }
 
-      const repoFromDoc = getScalarIn(templateDoc, repositoryPath);
+      const repoFromDoc = getScalarIn(outputDoc, repositoryPath);
       effectiveRepository =
         repoFromDoc ?? normalizeScalar((entry as ImageTagEntry).repository) ?? undefined;
     } catch {
       status = "missing";
-      previousTag = getScalarIn(templateDoc, tagPath);
+      previousTag = getScalarIn(outputDoc, tagPath);
       effectiveRepository =
-        getScalarIn(templateDoc, repositoryPath) ??
+        getScalarIn(outputDoc, repositoryPath) ??
         normalizeScalar((entry as ImageTagEntry).repository) ??
         undefined;
     }
@@ -189,7 +242,7 @@ export const mergeImageOverridesIntoTemplate = (
 
   return {
     changes,
-    updatedYaml: templateDoc.toString(),
+    updatedYaml: outputDoc.toString(),
   };
 };
 
@@ -234,13 +287,13 @@ export const applyImageTagUpdates = (
     if (doc.hasIn(imagePath)) {
       const current = doc.getIn(imagePath);
       previousValue = normalizeScalar(current);
-      doc.setIn(imagePath, nextTag);
+      setQuotedScalar(doc, imagePath, nextTag);
       status = previousValue === nextTag ? "unchanged" : "updated";
       usedPath = imagePath;
     } else if (doc.hasIn(directPath)) {
       const current = doc.getIn(directPath);
       previousValue = normalizeScalar(current);
-      doc.setIn(directPath, nextTag);
+      setQuotedScalar(doc, directPath, nextTag);
       status = previousValue === nextTag ? "unchanged" : "updated";
       usedPath = directPath;
     }
