@@ -15,6 +15,8 @@ const readFixture = (relativePath: string) => {
 };
 
 type ImageMap = Record<string, { repository?: string; tag?: string }>;
+type HelmImageConfig = { image?: { repository?: string; tag?: string } };
+type HelmValuesMap = Record<string, HelmImageConfig>;
 
 describe("values wizard", () => {
   describe("upgrade to 3.6.2", () => {
@@ -28,8 +30,8 @@ describe("values wizard", () => {
         template,
         images
       );
-      const parsed = YAML.parse(updatedYaml) as Record<string, any>;
-      const templateParsed = YAML.parse(template) as Record<string, any>;
+      const parsed = YAML.parse(updatedYaml) as HelmValuesMap;
+      const templateParsed = YAML.parse(template) as HelmValuesMap;
 
       expect(changes.length).toBeGreaterThan(0);
       expect(changes.some((c) => c.status === "missing")).toBe(false);
@@ -114,7 +116,7 @@ describe("values wizard", () => {
       const overrides = readFixture("values-373-official-custom.yaml");
       const template = template374();
       const images = images374();
-      const templateParsed = YAML.parse(template) as Record<string, any>;
+      const templateParsed = YAML.parse(template) as HelmValuesMap;
       const expectedTags = resolveExpectedTags(images);
 
       const { updatedYaml, changes } = mergeImageOverridesIntoTemplate(
@@ -122,7 +124,7 @@ describe("values wizard", () => {
         template,
         images,
       );
-      const parsed = YAML.parse(updatedYaml) as Record<string, any>;
+      const parsed = YAML.parse(updatedYaml) as HelmValuesMap;
 
       expect(changes.length).toBeGreaterThan(0);
       expect(changes.some((c) => c.status === "missing")).toBe(false);
