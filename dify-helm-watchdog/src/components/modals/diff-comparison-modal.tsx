@@ -110,7 +110,7 @@ export default function DiffComparisonModal({
 
         {/* Tabs and Filter Toggle */}
         <div className="flex items-center gap-4">
-          <div className="relative flex flex-[9] justify-center rounded-full border border-border bg-muted p-1 min-w-0">
+          <div className="relative flex flex-[9] justify-center rounded-full bg-black/10 p-1 min-w-0 dark:bg-muted/50">
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
               return (
@@ -118,22 +118,41 @@ export default function DiffComparisonModal({
                   key={tab.id}
                   type="button"
                   onClick={() => onTabChange(tab.id)}
-                  className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${
+                  className={`relative flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${
                     isActive
-                      ? "text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "z-20 text-primary-foreground shadow-sm"
+                      : "z-10 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="diff-tab-indicator"
-                      className="absolute inset-0 rounded-full border border-primary bg-primary"
-                      transition={{
-                        type: "spring",
-                        stiffness: 500,
-                        damping: 35,
+                      className="absolute inset-0 rounded-full bg-primary shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(0,0,0,0.2),0_4px_12px_rgba(0,0,0,0.3)] backdrop-blur-md"
+                      initial={{ scale: 1, filter: "blur(0px)" }}
+                      animate={{ 
+                        scale: [1, 1.4, 1], 
+                        filter: ["blur(0px) brightness(1)", "blur(12px) brightness(2)", "blur(0px) brightness(1)"] 
                       }}
-                    />
+                      transition={{
+                        layout: {
+                          type: "spring",
+                          stiffness: 350,
+                          damping: 40,
+                        },
+                        scale: {
+                          duration: 0.25,
+                          ease: "easeInOut",
+                          times: [0, 0.35, 1]
+                        },
+                        filter: {
+                          duration: 0.25,
+                          ease: "easeInOut",
+                          times: [0, 0.35, 1]
+                        }
+                      }}
+                    >
+                       <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.25),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.1),transparent_60%)]" />
+                    </motion.div>
                   )}
                   <span className="relative z-10">{tab.label}</span>
                 </button>
@@ -143,17 +162,20 @@ export default function DiffComparisonModal({
           <motion.button
             type="button"
             onClick={() => setShowDiffOnly((prev) => !prev)}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors whitespace-nowrap shrink-0 flex-[1] justify-center ${
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className={`group inline-flex items-center gap-2 overflow-hidden rounded-full border-none px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-all whitespace-nowrap shrink-0 flex-[1] justify-center shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(0,0,0,0.1),0_2px_8px_rgba(0,0,0,0.1)] backdrop-blur-[14px] backdrop-saturate-150 ${
               showDiffOnly
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-muted text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-foreground"
+                ? "bg-primary text-primary-foreground shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(0,0,0,0.2),0_4px_12px_rgba(var(--color-primary),0.4)]"
+                : "bg-white/50 text-muted-foreground hover:bg-white/70 hover:text-foreground dark:bg-white/5 dark:hover:bg-white/10"
             }`}
             aria-label={showDiffOnly ? "Show all lines" : "Show diff only"}
           >
-            <Filter className="h-3.5 w-3.5" />
-            <span>Diff Only</span>
+            {showDiffOnly && (
+               <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.25),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.1),transparent_60%)]" />
+            )}
+            <Filter className={`h-3.5 w-3.5 ${showDiffOnly ? "drop-shadow-sm" : ""}`} />
+            <span className={showDiffOnly ? "drop-shadow-sm" : ""}>Diff Only</span>
           </motion.button>
         </div>
 

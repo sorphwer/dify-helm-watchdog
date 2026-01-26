@@ -963,12 +963,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               handleOpenWizard();
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-gradient-to-br from-white/25 to-white/10 px-3 py-1 text-[10px] font-medium text-white shadow-[0_4px_16px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:from-white/35 hover:to-white/20 hover:shadow-[0_8px_20px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.4)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                            className="group/wizard absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 overflow-hidden rounded-full border-none bg-white/20 px-3 py-1 text-[10px] font-medium text-white shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.6),inset_-1px_-1px_0_0_rgba(255,255,255,0.3),0_4px_16px_rgba(0,0,0,0.2)] backdrop-blur-[14px] backdrop-saturate-150 transition-all hover:-translate-y-0.5 hover:bg-white/30 hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.8),inset_-1px_-1px_0_0_rgba(255,255,255,0.5),0_6px_20px_rgba(0,0,0,0.25)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                             aria-label="Open tag update wizard"
                             title="Open tag update wizard"
                           >
-                            <MapPinned className="h-3.5 w-3.5" />
-                            update tag to this
+                            <span className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.3),transparent_50%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.15),transparent_50%)] opacity-100 transition-opacity group-hover/wizard:opacity-100" />
+                            <MapPinned className="h-3.5 w-3.5 drop-shadow-sm" />
+                            <span className="drop-shadow-sm">update tag to this</span>
                           </button>
                         ) : null}
                         {showDiffIcon ? (
@@ -978,7 +979,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-gradient-to-br from-primary/10 to-primary/5 px-3 py-1 text-[10px] font-medium text-foreground shadow-[0_4px_12px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.4)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:from-primary/20 hover:to-primary/10 hover:shadow-[0_8px_16px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.6)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:shadow-[0_4px_12px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.1)] dark:hover:shadow-[0_8px_16px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.15)]"
+                            className="group/diff absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 overflow-hidden rounded-full border-none bg-black/5 px-3 py-1 text-[10px] font-medium text-foreground shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.7),inset_-1px_-1px_0_0_rgba(0,0,0,0.05),0_4px_12px_rgba(0,0,0,0.05)] backdrop-blur-[14px] backdrop-saturate-150 transition-all hover:-translate-y-0.5 hover:bg-black/10 hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.9),inset_-1px_-1px_0_0_rgba(0,0,0,0.1),0_6px_16px_rgba(0,0,0,0.1)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-white/10 dark:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.3),inset_-1px_-1px_0_0_rgba(255,255,255,0.1),0_4px_12px_rgba(0,0,0,0.2)] dark:hover:bg-white/20 dark:hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(255,255,255,0.15),0_6px_16px_rgba(0,0,0,0.3)]"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -990,8 +991,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                                 : "Compare versions"
                             }
                           >
-                            <FileDiff className="h-3.5 w-3.5" />
-                            diff
+                            <span className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.4),transparent_50%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.1),transparent_50%)] opacity-0 transition-opacity group-hover/diff:opacity-100 dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.2),transparent_50%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.05),transparent_50%)]" />
+                            <FileDiff className="h-3.5 w-3.5 drop-shadow-sm" />
+                            <span className="drop-shadow-sm">diff</span>
                           </button>
                         ) : null}
                       </div>
@@ -1022,8 +1024,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           ) : null}
 
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-            <div className="flex items-center justify-center gap-4">
-              <div className="relative flex w-full justify-center rounded-full border border-border/40 bg-muted/30 p-1.5 backdrop-blur-sm shadow-inner">
+            <div className="relative z-30 flex items-center justify-center gap-4 py-2">
+              <div className="relative flex w-full justify-center rounded-full bg-black/10 p-1 dark:bg-muted/50">
                 {artifactTabs.map((tab) => {
                   const isActive = tab.id === activeTab.id;
                   return (
@@ -1031,9 +1033,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveArtifact(tab.id)}
-                      className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${isActive
-                          ? "text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
+                      className={`relative flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${isActive
+                          ? "z-20 text-primary-foreground shadow-sm"
+                          : "z-10 text-muted-foreground hover:text-foreground"
                         }`}
                       whileHover={
                         !isActive
@@ -1055,13 +1057,32 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                       {isActive && (
                         <motion.div
                           layoutId="artifact-tab-indicator"
-                          className="absolute inset-0 rounded-full border border-primary/20 bg-gradient-to-br from-primary to-primary/80 shadow-[0_4px_12px_rgba(0,51,255,0.3),inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-md"
-                          transition={{
-                            type: "spring",
-                            stiffness: 500,
-                            damping: 35,
+                          className="absolute inset-0 rounded-full bg-primary shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(0,0,0,0.2),0_4px_12px_rgba(0,0,0,0.3)] backdrop-blur-md"
+                          initial={{ scale: 1, filter: "blur(0px)" }}
+                          animate={{ 
+                            scale: [1, 1.4, 1],
+                            filter: ["blur(0px) brightness(1)", "blur(12px) brightness(2)", "blur(0px) brightness(1)"] 
                           }}
-                        />
+                          transition={{
+                            layout: {
+                              type: "spring",
+                              stiffness: 350,
+                              damping: 40,
+                            },
+                            scale: {
+                              duration: 0.25,
+                              ease: "easeInOut",
+                              times: [0, 0.35, 1]
+                            },
+                            filter: {
+                              duration: 0.25,
+                              ease: "easeInOut",
+                              times: [0, 0.35, 1]
+                            }
+                          }}
+                        >
+                           <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.25),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.1),transparent_60%)]" />
+                        </motion.div>
                       )}
                       {/* Hover 状态的微妙高光效果 */}
                       {!isActive && (

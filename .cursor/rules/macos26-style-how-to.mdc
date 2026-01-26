@@ -1,0 +1,121 @@
+# macOS 26 Liquid Glass Style Guide
+
+This guide defines the "macOS 26" Liquid Glass design language, characterized by physical volume, complex light interactions, dynamic morphing animations, and a complete absence of traditional borders.
+
+## Core Philosophy
+
+1.  **No Borders (`border-none`)**: Edges are defined solely by internal highlights and external shadows, simulating a thick, translucent material.
+2.  **Liquid Physics**: Interactive elements behave like viscous, glowing liquid—morphing (scaling/blurring) during movement and settling without bounce (over-damped).
+3.  **Complex Lighting**: Uses multiple layers of inner shadows (`inset`) to simulate surface reflection (top-left) and subsurface scattering (bottom-right).
+4.  **Volume & Texture**: High saturation (`backdrop-saturate-150`) and heavy blur (`backdrop-blur-[14px]`) create a rich, crystal-like texture.
+
+## Component Implementation
+
+### 1. Liquid Glass Button
+
+Buttons use a complex shadow stack to replace borders and create depth.
+
+**Tailwind Utilities:**
+```tsx
+className="
+  relative overflow-hidden rounded-full border-none 
+  bg-black/5 dark:bg-white/10 
+  backdrop-blur-[14px] backdrop-saturate-150
+  
+  /* Light Mode Shadows: Bright top-left highlight, soft bottom-right shade, subtle drop shadow */
+  shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.7),inset_-1px_-1px_0_0_rgba(0,0,0,0.05),0_4px_12px_rgba(0,0,0,0.05)]
+  
+  /* Dark Mode Shadows: Sharper, glassier highlights on both sides */
+  dark:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.3),inset_-1px_-1px_0_0_rgba(255,255,255,0.1),0_4px_12px_rgba(0,0,0,0.2)]
+  
+  transition-all 
+  
+  /* Hover State: Lift up, intensify highlights and shadows */
+  hover:-translate-y-0.5 
+  hover:bg-black/10 dark:hover:bg-white/20
+  hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.9),inset_-1px_-1px_0_0_rgba(0,0,0,0.1),0_6px_16px_rgba(0,0,0,0.1)]
+  
+  /* Active State: Press down */
+  active:translate-y-0 active:scale-95
+"
+```
+
+**Volume Gradient (Inner Element):**
+Add an absolute positioned child to simulate internal light refraction.
+```tsx
+<span className="
+  absolute inset-0 -z-10 
+  bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.4),transparent_50%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.1),transparent_50%)] 
+  opacity-0 group-hover:opacity-100 transition-opacity
+" />
+```
+
+### 2. Morphing Tab Indicator
+
+The active tab indicator behaves like a sliding drop of liquid light.
+
+**Container:**
+Minimalist groove to let the indicator shine.
+```tsx
+<div className="relative flex w-full justify-center rounded-full bg-muted/50 p-1">
+  {/* Tabs... */}
+</div>
+```
+
+**Indicator (Motion Component):**
+Uses `framer-motion` for the liquid morphing effect.
+
+**Visual Style:**
+```tsx
+className="
+  absolute inset-0 rounded-full 
+  bg-primary 
+  /* Strong glass edges + colored drop shadow */
+  shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(0,0,0,0.2),0_4px_12px_rgba(0,0,0,0.3)] 
+  backdrop-blur-md
+"
+```
+
+**Animation Physics:**
+- **Scale**: Expands to 115% mid-flight to simulate surface tension.
+- **Filter**: Blurs (12px) and Brightens (200%) during fast movement (Motion Blur + Flash).
+- **Timing**: Fast attack (35% to peak), over-damped spring (no bounce).
+
+```tsx
+<motion.div
+  initial={{ scale: 1, filter: "blur(0px)" }}
+  animate={{ 
+    // Morph: Expand -> Contract
+    scale: [1, 1.15, 1],
+    // Effect: Clear -> Motion Blur + Flash -> Clear
+    filter: ["blur(0px) brightness(1)", "blur(12px) brightness(2)", "blur(0px) brightness(1)"] 
+  }}
+  transition={{
+    layout: {
+      type: "spring",
+      stiffness: 350, // High stiffness
+      damping: 40,    // Over-damped (Critical damping ~37.4)
+    },
+    scale: {
+      duration: 0.25,
+      ease: "easeInOut",
+      times: [0, 0.35, 1] // Peak early at 35%
+    },
+    filter: {
+      duration: 0.25,
+      ease: "easeInOut",
+      times: [0, 0.35, 1]
+    }
+  }}
+>
+  {/* Inner Volume Gradient */}
+  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.25),transparent_60%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.1),transparent_60%)]" />
+</motion.div>
+```
+
+## Usage Checklist
+
+- [ ] Remove all `border-*` classes.
+- [ ] Ensure `z-index` handling prevents clipping when elements expand (e.g., set container `z-30`, active item `z-20`).
+- [ ] Check Light/Dark mode contrast for inner highlights (Light mode needs stronger white highlights, Dark mode needs subtler ones).
+- [ ] Verify `backdrop-blur` and `saturate` are applied for that "thick glass" look.
