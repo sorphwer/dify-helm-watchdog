@@ -927,7 +927,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
                                 isActive 
                                   ? "text-white/10" 
-                                  : "text-zinc-100 dark:text-zinc-800"
+                                  : "text-zinc-200 dark:text-zinc-700"
                               }`}
                               strokeWidth={1.7}
                             />
@@ -937,7 +937,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
                                 isActive 
                                   ? "text-white/10" 
-                                  : "text-rose-100 dark:text-rose-950"
+                                  : "text-rose-200 dark:text-rose-900"
                               }`}
                               strokeWidth={1.7}
                             />
@@ -947,7 +947,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
                                 isActive 
                                   ? "text-white/10" 
-                                  : "text-amber-100 dark:text-yellow-950"
+                                  : "text-amber-200 dark:text-yellow-900"
                               }`}
                               strokeWidth={1.7}
                             />
@@ -1050,7 +1050,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            className="group/diff absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 overflow-hidden rounded-full border-none bg-white/35 px-3 py-1 text-[10px] font-medium text-foreground shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.7),inset_-1px_-1px_0_0_rgba(0,0,0,0.05),0_4px_12px_rgba(0,0,0,0.05)] backdrop-blur-[6px] backdrop-saturate-150 transition-all hover:-translate-y-0.5 hover:bg-white/45 hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.9),inset_-1px_-1px_0_0_rgba(0,0,0,0.1),0_6px_16px_rgba(0,0,0,0.1)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-white/12 dark:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.3),inset_-1px_-1px_0_0_rgba(255,255,255,0.1),0_4px_12px_rgba(0,0,0,0.2)] dark:hover:bg-white/20 dark:hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(255,255,255,0.15),0_6px_16px_rgba(0,0,0,0.3)]"
+                            className="group/diff absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 overflow-hidden rounded-full border-none bg-white/20 px-3 py-1 text-[10px] font-medium text-foreground shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.7),inset_-1px_-1px_0_0_rgba(0,0,0,0.05),0_4px_12px_rgba(0,0,0,0.05)] backdrop-blur-[4px] backdrop-saturate-150 transition-all hover:-translate-y-0.5 hover:bg-white/30 hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.9),inset_-1px_-1px_0_0_rgba(0,0,0,0.1),0_6px_16px_rgba(0,0,0,0.1)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-white/8 dark:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.3),inset_-1px_-1px_0_0_rgba(255,255,255,0.1),0_4px_12px_rgba(0,0,0,0.2)] dark:hover:bg-white/15 dark:hover:shadow-[inset_1px_1px_0_0_rgba(255,255,255,0.4),inset_-1px_-1px_0_0_rgba(255,255,255,0.15),0_6px_16px_rgba(0,0,0,0.3)]"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -1062,7 +1062,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                                 : "Compare versions"
                             }
                           >
-                            <span className="absolute inset-0 -z-20 rounded-full bg-white/20 dark:bg-white/8 backdrop-blur-[6px] backdrop-saturate-150" />
+                            <span className="absolute inset-0 -z-20 rounded-full bg-white/15 dark:bg-white/5 backdrop-blur-[4px] backdrop-saturate-150" />
                             <span className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.4),transparent_50%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.1),transparent_50%)] opacity-0 transition-opacity group-hover/diff:opacity-100 dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.2),transparent_50%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.05),transparent_50%)]" />
                             <FileDiff className="h-3.5 w-3.5 drop-shadow-sm" />
                             <span className="drop-shadow-sm">diff</span>
