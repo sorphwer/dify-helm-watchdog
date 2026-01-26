@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import ReactMarkdown from "react-markdown";
@@ -147,20 +148,24 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
                 )}
               />
             ),
-            code: ({ inline, className: codeClass, ...props }) => (
-              <code
-                {...props}
-                className={withClassName(
-                  inline
-                    ? "rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground"
-                    : "font-mono text-xs text-foreground",
-                  codeClass,
-                )}
-              />
-            ),
-            img: ({ className: imgClass, ...props }) => (
+            code: ({ className: codeClass, ...props }) => {
+              const isInline = !codeClass;
+              return (
+                <code
+                  {...props}
+                  className={withClassName(
+                    isInline
+                      ? "rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground"
+                      : "font-mono text-xs text-foreground",
+                    codeClass,
+                  )}
+                />
+              );
+            },
+            img: ({ className: imgClass, alt, ...props }) => (
               <img
                 {...props}
+                alt={alt ?? ""}
                 className={withClassName(
                   "max-w-full rounded-lg border border-border",
                   imgClass,

@@ -119,3 +119,158 @@ className="
 - [ ] Ensure `z-index` handling prevents clipping when elements expand (e.g., set container `z-30`, active item `z-20`).
 - [ ] Check Light/Dark mode contrast for inner highlights (Light mode needs stronger white highlights, Dark mode needs subtler ones).
 - [ ] Verify `backdrop-blur` and `saturate` are applied for that "thick glass" look.
+
+
+## If blur background is requird see the following blog:
+
+CSS + SVG Apple iOS26 Liquid Glass Effect
+
+Note: This effect is inspired by the "Liquid Glass" design language introduced in the fictional/future concept of iOS 26. It relies on SVG filters which may have varying support across browsers (Safari often has issues with feDisplacementMap on HTML elements).
+
+Introduction
+
+The "Liquid Glass" effect goes beyond traditional Glassmorphism (which is just blur + transparency). The core concept of Liquid Glass is "Blurred Background" + "Irregular Distortion". It looks as if you are viewing content through a glass of water that is slightly agitated.
+
+Traditional frosted glass uses backdrop-filter: blur(10px);, which creates a uniform blur. Liquid Glass adds a refraction layer that warps the light passing through it, creating a more organic and physical feel.
+
+We can achieve this on the web using an SVG filter (feDisplacementMap) to distort the element based on a noise texture.
+
+1. The Principle
+
+We use an SVG filter with the following primitives:
+
+feTurbulence: Generates a random "noise" texture (fractal noise). This serves as the map for our distortion.
+
+feGaussianBlur: Smooths out the noise so the distortion is liquid-like rather than jagged.
+
+feDisplacementMap: Uses the smooth noise map to displace the pixels of the SourceGraphic (the element behind or inside).
+
+2. HTML Structure
+
+We need a container for our glass element and a hidden SVG that defines the filter.
+
+<!-- The Liquid Glass Element -->
+<div class="glass-container">
+  <div class="glass-filter"></div>
+  <div class="glass-specular"></div>
+  <div class="content">
+    Hello iOS 26
+  </div>
+</div>
+
+<!-- The Hidden SVG Filter -->
+<svg style="display: none;">
+  <defs>
+    <filter id="liquid-glass-filter" x="0%" y="0%" width="100%" height="100%">
+      <!-- 1. Generate Fractal Noise -->
+      <feTurbulence 
+        type="fractalNoise" 
+        baseFrequency="0.008 0.008" 
+        numOctaves="2" 
+        seed="7" 
+        result="noise"
+      />
+      
+      <!-- 2. Blur the Noise for smoothness -->
+      <feGaussianBlur 
+        in="noise" 
+        stdDeviation="2" 
+        result="map"
+      />
+      
+      <!-- 3. Apply Displacement -->
+      <!-- scale controls the intensity of the distortion -->
+      <feDisplacementMap 
+        in="SourceGraphic" 
+        in2="map" 
+        scale="70" 
+        xChannelSelector="R" 
+        yChannelSelector="G"
+      />
+    </filter>
+  </defs>
+</svg>
+
+
+3. CSS Styling
+
+The magic happens by applying the SVG filter to the element. Note that backdrop-filter currently doesn't support custom SVG filters in a standard way, so we often apply this to a background layer or the element itself to distort what's inside or use a specific layering technique.
+
+body {
+  margin: 0;
+  height: 100vh;
+  background: url('[https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop](https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop)') no-repeat center center;
+  background-size: cover;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.glass-container {
+  position: relative;
+  width: 300px;
+  height: 200px;
+  border-radius: 24px;
+  overflow: hidden;
+  
+  /* Basic Glassmorphism base */
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 32px 0 rgba(31, 38, 135, 0.37),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  
+  /* Flex center for content */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* Applying the distortion. 
+   Note: In some implementations, this might be applied to a 
+   pseudo-element or a specific background layer.
+*/
+.glass-filter {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  backdrop-filter: blur(10px); /* Standard blur fallback */
+  
+  /* Apply the SVG Filter */
+  filter: url(#liquid-glass-filter); 
+}
+
+.glass-specular {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg, 
+    rgba(255, 255, 255, 0.4) 0%, 
+    rgba(255, 255, 255, 0.05) 40%, 
+    rgba(255, 255, 255, 0) 100%
+  );
+  border-radius: 24px;
+}
+
+
+4. How it Works
+
+<feTurbulence>: Creates a cloud-like texture (noise). baseFrequency controls how "fine" or "coarse" the ripples are. 0.008 gives a slow, large wave effect.
+
+<feDisplacementMap>: Takes the color values (R and G channels) from the noise map and shifts the pixels of your element (SourceGraphic) in X and Y directions.
+
+scale: Increasing this value makes the liquid effect more "thick" and distorted.
+
+Compatibility Note
+
+Chrome/Edge: Good support.
+
+Firefox: Generally good support.
+
+Safari: Often struggles with feDisplacementMap applied directly to HTML elements or backdrop-filter. It might result in no effect or rendering artifacts.
+
+Original concept and code adapted from various "iOS 26 Liquid Glass" experiments found on CodePen and developer blogs.
