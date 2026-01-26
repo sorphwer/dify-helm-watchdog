@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
+  Archive,
   ArrowUpRight,
   BookOpenText,
   CalendarClock,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   ScrollText,
   Settings2,
+  Trash2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -215,6 +218,33 @@ interface ImageTagEntry {
   tag?: string;
 }
 
+// Version status from official Dify Helm docs sidebar
+type VersionStatus = "non-skippable" | "archived" | "deprecated";
+
+const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
+  const map = new Map<string, VersionStatus>();
+  const lines = content.split("\n");
+
+  for (const line of lines) {
+    // Extract version number from markdown link
+    const versionMatch = line.match(/\[v([\d.]+(?:-[^\]]+)?)/);
+    if (!versionMatch) continue;
+
+    const version = versionMatch[1];
+
+    // Identify status by emoji
+    if (line.includes("⚠️")) {
+      map.set(version, "non-skippable");
+    } else if (line.includes("📦")) {
+      map.set(version, "archived");
+    } else if (line.includes("🗑️")) {
+      map.set(version, "deprecated");
+    }
+  }
+
+  return map;
+};
+
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const { resolvedTheme } = useTheme();
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -261,6 +291,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   // Workflow logs modal state
   const [logsModalOpen, setLogsModalOpen] = useState(false);
 
+  // Version status from official docs (fetched async)
+  const [versionStatusMap, setVersionStatusMap] = useState<Map<string, VersionStatus>>(new Map());
+
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
       versions.map((entry) => [entry.version, entry]),
@@ -284,6 +317,23 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       return null;
     }
   }, [imagesContent]);
+
+  // Fetch version status from official Dify Helm docs
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch("https://langgenius.github.io/dify-helm/_sidebar.md", {
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.text() : Promise.reject()))
+      .then(parseSidebarMd)
+      .then(setVersionStatusMap)
+      .catch(() => {
+        // Silent fail - don't modify UI if request fails
+      });
+
+    return () => controller.abort();
+  }, []);
 
   // Wizard handlers
   const handleOpenWizard = useCallback(() => {
@@ -789,14 +839,55 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                          className={`group flex min-h-[92px] w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive
+                          className={`group relative flex min-h-[92px] w-full flex-col gap-1 overflow-hidden rounded-2xl border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-border bg-transparent text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-foreground"
                             }`}
                         >
-                          <div className="flex items-start justify-between gap-3">
+                          {/* Decorative background icon for special status versions */}
+                          {versionStatusMap.get(version.version) === "archived" && (
+                            <Archive 
+                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 ${
+                                isActive 
+                                  ? "text-primary-foreground opacity-10" 
+                                  : resolvedTheme === "dark" 
+                                    ? "text-zinc-800" 
+                                    : "text-zinc-100"
+                              }`}
+                              strokeWidth={1.7}
+                            />
+                          )}
+                          {versionStatusMap.get(version.version) === "deprecated" && (
+                            <Trash2 
+                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 ${
+                                isActive 
+                                  ? "text-primary-foreground opacity-10" 
+                                  : resolvedTheme === "dark"
+                                    ? "text-rose-950"
+                                    : "text-rose-100"
+                              }`}
+                              strokeWidth={1.7}
+                            />
+                          )}
+                          {versionStatusMap.get(version.version) === "non-skippable" && (
+                            <AlertTriangle 
+                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 ${
+                                isActive 
+                                  ? "text-primary-foreground opacity-10" 
+                                  : resolvedTheme === "dark"
+                                    ? "text-yellow-950"
+                                    : "text-amber-100"
+                              }`}
+                              strokeWidth={1.7}
+                            />
+                          )}
+                          <div className="relative z-10 flex items-start justify-between gap-3">
                             <span
-                              className={`text-base font-semibold tracking-wide ${isActive ? "text-primary-foreground" : "text-foreground"
+                              className={`text-base font-semibold tracking-wide ${isActive
+                                  ? "text-primary-foreground"
+                                  : versionStatusMap.get(version.version) === "archived" || versionStatusMap.get(version.version) === "deprecated"
+                                    ? "text-muted-foreground"
+                                    : "text-foreground"
                                 }`}
                             >
                               v{version.version}
@@ -809,23 +900,56 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                             </span>
                           </div>
                           <div
-                            className={`flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${isActive ? "text-primary-foreground/90" : "text-muted-foreground"
+                            className={`relative z-10 flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.2em] ${isActive ? "text-primary-foreground/90" : "text-muted-foreground"
                               }`}
                           >
                             {version.appVersion && (
                               <span
-                                className={`rounded-full border px-2 py-0.5 ${isActive
-                                    ? "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground"
-                                    : "border-border bg-muted text-muted-foreground"
+                                className={`text-[10px] font-semibold tracking-normal ${isActive
+                                    ? "text-primary-foreground"
+                                    : "text-muted-foreground"
                                   }`}
                               >
                                 App {version.appVersion}
                               </span>
                             )}
+                            {versionStatusMap.get(version.version) === "non-skippable" && (
+                              <span
+                                className={`inline-flex items-center gap-0.5 text-[10px] font-semibold tracking-normal ${isActive
+                                    ? "text-primary-foreground"
+                                    : "text-amber-600 dark:text-amber-400"
+                                  }`}
+                              >
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                Non-skippable
+                              </span>
+                            )}
+                            {versionStatusMap.get(version.version) === "archived" && (
+                              <span
+                                className={`inline-flex items-center gap-0.5 text-[10px] font-semibold tracking-normal ${isActive
+                                    ? "text-primary-foreground/70"
+                                    : "text-muted-foreground/70"
+                                  }`}
+                              >
+                                <Archive className="h-2.5 w-2.5" />
+                                Archived
+                              </span>
+                            )}
+                            {versionStatusMap.get(version.version) === "deprecated" && (
+                              <span
+                                className={`inline-flex items-center gap-0.5 text-[10px] font-semibold tracking-normal ${isActive
+                                    ? "text-primary-foreground"
+                                    : "text-red-600 dark:text-red-400"
+                                  }`}
+                              >
+                                <Trash2 className="h-2.5 w-2.5" />
+                                Deprecated
+                              </span>
+                            )}
                           </div>
                           {version.createTime && (
                             <span
-                              className={`mt-1 text-[9px] uppercase tracking-[0.05em] ${isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
+                              className={`relative z-10 mt-1 text-[9px] uppercase tracking-[0.05em] ${isActive ? "text-primary-foreground/80" : "text-muted-foreground/80"
                                 }`}
                             >
                               {formatDate(version.createTime)}
@@ -839,7 +963,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               handleOpenWizard();
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/40 bg-primary-foreground/20 px-3 py-1 text-[10px] font-semibold text-primary-foreground transition hover:border-primary-foreground/60 hover:bg-primary-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/60"
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-gradient-to-br from-white/25 to-white/10 px-3 py-1 text-[10px] font-medium text-white shadow-[0_4px_16px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:from-white/35 hover:to-white/20 hover:shadow-[0_8px_20px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.4)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                             aria-label="Open tag update wizard"
                             title="Open tag update wizard"
                           >
@@ -854,7 +978,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               event.stopPropagation();
                               openDiffModal(version.version);
                             }}
-                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] font-semibold text-foreground transition hover:border-primary/50 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-gradient-to-br from-primary/10 to-primary/5 px-3 py-1 text-[10px] font-medium text-foreground shadow-[0_4px_12px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.4)] backdrop-blur-md transition-all hover:-translate-y-0.5 hover:from-primary/20 hover:to-primary/10 hover:shadow-[0_8px_16px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.6)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:shadow-[0_4px_12px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.1)] dark:hover:shadow-[0_8px_16px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.15)]"
                             aria-label={
                               selectedVersion
                                 ? `Compare v${version.version} with v${selectedVersion}`
@@ -899,7 +1023,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
             <div className="flex items-center justify-center gap-4">
-              <div className="relative flex w-full justify-center rounded-full border border-border bg-muted p-1">
+              <div className="relative flex w-full justify-center rounded-full border border-border/40 bg-muted/30 p-1.5 backdrop-blur-sm shadow-inner">
                 {artifactTabs.map((tab) => {
                   const isActive = tab.id === activeTab.id;
                   return (
@@ -908,7 +1032,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                       type="button"
                       onClick={() => setActiveArtifact(tab.id)}
                       className={`relative z-10 flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${isActive
-                          ? "text-primary-foreground"
+                          ? "text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:text-foreground"
                         }`}
                       whileHover={
@@ -927,11 +1051,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                         damping: 30,
                       }}
                     >
-                      {/* 激活状态的背景指示器 */}
+                      {/* 激活状态的背景指示器 - Liquid Glass Style */}
                       {isActive && (
                         <motion.div
                           layoutId="artifact-tab-indicator"
-                          className="absolute inset-0 rounded-full border border-primary bg-primary"
+                          className="absolute inset-0 rounded-full border border-primary/20 bg-gradient-to-br from-primary to-primary/80 shadow-[0_4px_12px_rgba(0,51,255,0.3),inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-md"
                           transition={{
                             type: "spring",
                             stiffness: 500,
