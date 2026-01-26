@@ -958,7 +958,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               strokeWidth={1.7}
                             />
                           )}
-                          <div className="relative z-10 flex items-start justify-between gap-3">
+                          <div className="relative z-10 flex items-baseline justify-between gap-3">
                             <span
                               className={`text-base font-semibold tracking-wide ${isActive
                                   ? "text-primary-foreground"
