@@ -924,36 +924,30 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           {/* Decorative background icon for special status versions */}
                           {versionStatusMap.get(version.version) === "archived" && (
                             <Archive 
-                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 ${
+                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
                                 isActive 
-                                  ? "text-primary-foreground opacity-10" 
-                                  : resolvedTheme === "dark" 
-                                    ? "text-zinc-800" 
-                                    : "text-zinc-100"
+                                  ? "text-white/10" 
+                                  : "text-zinc-100 dark:text-zinc-800"
                               }`}
                               strokeWidth={1.7}
                             />
                           )}
                           {versionStatusMap.get(version.version) === "deprecated" && (
                             <Trash2 
-                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 ${
+                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
                                 isActive 
-                                  ? "text-primary-foreground opacity-10" 
-                                  : resolvedTheme === "dark"
-                                    ? "text-rose-950"
-                                    : "text-rose-100"
+                                  ? "text-white/10" 
+                                  : "text-rose-100 dark:text-rose-950"
                               }`}
                               strokeWidth={1.7}
                             />
                           )}
                           {versionStatusMap.get(version.version) === "non-skippable" && (
                             <AlertTriangle 
-                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 ${
+                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
                                 isActive 
-                                  ? "text-primary-foreground opacity-10" 
-                                  : resolvedTheme === "dark"
-                                    ? "text-yellow-950"
-                                    : "text-amber-100"
+                                  ? "text-white/10" 
+                                  : "text-amber-100 dark:text-yellow-950"
                               }`}
                               strokeWidth={1.7}
                             />

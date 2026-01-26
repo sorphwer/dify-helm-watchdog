@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind v4: 让 dark: 变体使用 .dark class 选择器而不是媒体查询 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* View Transition API - 主题切换动画 */
 ::view-transition-old(root),
 ::view-transition-new(root) {
