@@ -1,13 +1,19 @@
 // next.config.js
-import type { NextConfig } from 'next';
-import { codeInspectorPlugin } from 'code-inspector-plugin';
+import type { NextConfig } from "next";
+import { codeInspectorPlugin } from "code-inspector-plugin";
+
+const isDev = process.env.NODE_ENV === "development";
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    rules: codeInspectorPlugin({
-      bundler: 'turbopack',
-    }),
-  },
+  ...(isDev
+    ? {
+        turbopack: {
+          rules: codeInspectorPlugin({
+            bundler: "turbopack",
+          }),
+        },
+      }
+    : {}),
 };
 
 export default nextConfig;

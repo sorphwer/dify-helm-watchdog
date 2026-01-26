@@ -29,6 +29,7 @@ import type {
   StoredVersion,
 } from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { ImageValidationTable } from "@/components/image-validation-table";
 import { ThemeToggle } from "@/components/theme-toggle";
 import ValuesWizardModal from "@/components/modals/values-wizard-modal";
@@ -252,7 +253,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     versions[0]?.version ?? null,
   );
   const [activeArtifact, setActiveArtifact] = useState<
-    "values" | "images" | "validation"
+    "values" | "images" | "validation" | "details"
   >("values");
   const [valuesContent, setValuesContent] = useState<string>("");
   const [imagesContent, setImagesContent] = useState<string>("");
@@ -260,6 +261,12 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     useState<ImageValidationPayload | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasValidationAsset, setHasValidationAsset] = useState(false);
+  const [detailsContent, setDetailsContent] = useState<string>("");
+  const [detailsStatus, setDetailsStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [detailsReloadKey, setDetailsReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadFlag, setReloadFlag] = useState(0);
@@ -281,6 +288,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
   const diffRequestRef = useRef(0);
+  const detailsRequestRef = useRef(0);
 
   // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -334,6 +342,51 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!selectedVersion) {
+      setDetailsContent("");
+      setDetailsStatus("idle");
+      setDetailsError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const requestId = detailsRequestRef.current + 1;
+    detailsRequestRef.current = requestId;
+
+    setDetailsStatus("loading");
+    setDetailsError(null);
+    setDetailsContent("");
+
+    const docsVersion = selectedVersion.replace(/\./g, "_");
+
+    fetch(`https://langgenius.github.io/dify-helm/pages/${docsVersion}.md`, {
+      signal: controller.signal,
+    })
+      .then((res) =>
+        res.ok ? res.text() : Promise.reject(new Error(`HTTP ${res.status}`)),
+      )
+      .then((text) => {
+        if (detailsRequestRef.current !== requestId) {
+          return;
+        }
+        setDetailsContent(text);
+        setDetailsStatus("success");
+      })
+      .catch((thrown) => {
+        if (detailsRequestRef.current !== requestId) {
+          return;
+        }
+        if (thrown instanceof Error && thrown.name === "AbortError") {
+          return;
+        }
+        setDetailsStatus("error");
+        setDetailsError(`Failed to load details for v${selectedVersion}.`);
+      });
+
+    return () => controller.abort();
+  }, [selectedVersion, detailsReloadKey]);
 
   // Wizard handlers
   const handleOpenWizard = useCallback(() => {
@@ -526,6 +579,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     setReloadFlag((value) => value + 1);
   };
 
+  const handleDetailsRetry = useCallback(() => {
+    setDetailsReloadKey((value) => value + 1);
+  }, []);
+
   const codeTabs = useMemo(
     () => [
       {
@@ -555,6 +612,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         id: "validation" as const,
         label: "image availability",
         type: "validation" as const,
+      },
+      {
+        id: "details" as const,
+        label: "Details",
+        type: "markdown" as const,
       },
     ],
     [codeTabs],
@@ -1025,7 +1087,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
             <div className="relative z-30 flex items-center justify-center gap-4 py-2">
-              <div className="relative flex w-full justify-center rounded-full bg-black/10 p-1 dark:bg-muted/50">
+              <div className="relative flex w-full justify-center rounded-full bg-black/10 p-1 shadow-[6px_6px_18px_rgba(0,0,0,0.12)] dark:bg-muted/50">
                 {artifactTabs.map((tab) => {
                   const isActive = tab.id === activeTab.id;
                   return (
@@ -1128,6 +1190,40 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                     version={selectedVersion ?? undefined}
                     className="h-full w-full"
                   />
+                ) : activeTab.type === "markdown" ? (
+                  detailsStatus === "success" ? (
+                    <MarkdownRenderer
+                      content={detailsContent}
+                      className="h-full w-full"
+                    />
+                  ) : detailsStatus === "loading" || detailsStatus === "idle" ? (
+                    <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card/30">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        <span>Loading details...</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card/30 p-6">
+                      <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2 text-foreground/90">
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
+                          <span>
+                            {detailsError ??
+                              `Failed to load details for v${selectedVersion ?? ""}.`}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleDetailsRetry}
+                          className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-transparent px-4 py-1 text-xs uppercase tracking-[0.3em] text-foreground transition hover:border-primary/70 hover:bg-primary/10"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <ImageValidationTable
                     version={selectedVersion ?? undefined}

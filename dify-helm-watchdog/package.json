@@ -26,6 +26,8 @@
     "react": "19.1.0",
     "react-diff-viewer": "^3.1.1",
     "react-dom": "19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "semver": "7.7.3",
     "shadcn": "^3.5.0",
     "swagger-ui-react": "^5.30.2",
