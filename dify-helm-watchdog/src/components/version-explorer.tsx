@@ -210,6 +210,21 @@ const ensureImageTagsQuoted = (input: string): string =>
     },
   );
 
+const DOCS_BASE_URL = "https://langgenius.github.io/dify-helm/";
+
+const normalizeDocsMarkdown = (content: string): string =>
+  content.replace(
+    /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi,
+    (_match, rawHref: string, label: string) => {
+      const trimmedHref = rawHref.trim();
+      const normalizedHref =
+        /^https?:\/\//i.test(trimmedHref)
+          ? trimmedHref
+          : `${DOCS_BASE_URL}${trimmedHref.replace(/^\.\//, "")}`;
+      return `[${label}](${normalizedHref})`;
+    },
+  );
+
 // Helper for parsing image metadata
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -371,7 +386,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         if (detailsRequestRef.current !== requestId) {
           return;
         }
-        setDetailsContent(text);
+        setDetailsContent(normalizeDocsMarkdown(text));
         setDetailsStatus("success");
       })
       .catch((thrown) => {
