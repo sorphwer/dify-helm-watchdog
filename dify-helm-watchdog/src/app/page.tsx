@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { VersionExplorer } from "@/components/version-explorer";
 import { loadCache } from "@/lib/helm";
 
@@ -9,5 +10,9 @@ export const revalidate = 86400; // 24 hours
 export default async function Home() {
   const cache = await loadCache();
 
-  return <VersionExplorer data={cache} />;
+  return (
+    <Suspense>
+      <VersionExplorer data={cache} />
+    </Suspense>
+  );
 }

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
 import YAML from "yaml";
@@ -210,6 +211,19 @@ const ensureImageTagsQuoted = (input: string): string =>
     },
   );
 
+type ArtifactTab = "values" | "images" | "validation" | "details";
+const VALID_TABS: ArtifactTab[] = ["values", "images", "validation", "details"];
+const DEFAULT_TAB: ArtifactTab = "values";
+
+function updateUrl(params: Record<string, string | null>) {
+  const url = new URL(window.location.href);
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null) url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  }
+  window.history.replaceState(null, "", url.toString());
+}
+
 const DOCS_BASE_URL = "https://langgenius.github.io/dify-helm/";
 
 const normalizeDocsMarkdown = (content: string): string =>
@@ -263,13 +277,19 @@ const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
 
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const { resolvedTheme } = useTheme();
+  const searchParams = useSearchParams();
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
-  const [selectedVersion, setSelectedVersion] = useState<string | null>(
-    versions[0]?.version ?? null,
-  );
-  const [activeArtifact, setActiveArtifact] = useState<
-    "values" | "images" | "validation" | "details"
-  >("values");
+
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(() => {
+    const v = searchParams.get("v");
+    if (v && versions.some((ver) => ver.version === v)) return v;
+    return versions[0]?.version ?? null;
+  });
+  const [activeArtifact, setActiveArtifact] = useState<ArtifactTab>(() => {
+    const tab = searchParams.get("tab");
+    if (tab && VALID_TABS.includes(tab as ArtifactTab)) return tab as ArtifactTab;
+    return DEFAULT_TAB;
+  });
   const [valuesContent, setValuesContent] = useState<string>("");
   const [imagesContent, setImagesContent] = useState<string>("");
   const [validationData, setValidationData] =
@@ -316,6 +336,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
   // Version status from official docs (fetched async)
   const [versionStatusMap, setVersionStatusMap] = useState<Map<string, VersionStatus>>(new Map());
+
+  const defaultVersion = versions[0]?.version ?? null;
+
+  const selectVersion = useCallback(
+    (v: string) => {
+      setSelectedVersion(v);
+      updateUrl({ v: v === defaultVersion ? null : v });
+    },
+    [defaultVersion],
+  );
+
+  const selectTab = useCallback((tab: ArtifactTab) => {
+    setActiveArtifact(tab);
+    updateUrl({ tab: tab === DEFAULT_TAB ? null : tab });
+  }, []);
 
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
@@ -660,7 +695,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     };
   };
 
-  const openDiffModal = (targetVersionId: string) => {
+  const openDiffModal = useCallback((targetVersionId: string) => {
     if (!selectedVersion) {
       return;
     }
@@ -676,6 +711,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffRequestRef.current = requestId;
 
     setDiffModalOpen(true);
+    updateUrl({ diff: targetVersionId });
     setDiffMeta({
       baseVersion: baseVersionEntry.version,
       targetVersion: targetVersionEntry.version,
@@ -721,17 +757,29 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         setDiffLoading(false);
       }
     })();
-  };
+  }, [selectedVersion, versionMap]);
 
-  const closeDiffModal = () => {
+  const closeDiffModal = useCallback(() => {
     diffRequestRef.current += 1;
     setDiffModalOpen(false);
+    updateUrl({ diff: null });
     setDiffMeta(null);
     setDiffError(null);
     setDiffLoading(false);
     setDiffValuesContent({ oldValue: "", newValue: "" });
     setDiffImagesContent({ oldValue: "", newValue: "" });
-  };
+  }, []);
+
+  // Auto-open diff modal when URL contains ?diff=<version>
+  const diffFromUrlRef = useRef(false);
+  useEffect(() => {
+    if (diffFromUrlRef.current) return;
+    diffFromUrlRef.current = true;
+    const diffTarget = searchParams.get("diff");
+    if (diffTarget && versions.some((v) => v.version === diffTarget)) {
+      openDiffModal(diffTarget);
+    }
+  }, [searchParams, versions, openDiffModal]);
 
   const activeTab =
     artifactTabs.find((tab) => tab.id === activeArtifact) ??
@@ -912,7 +960,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                       <div className="relative">
                         <motion.button
                           type="button"
-                          onClick={() => setSelectedVersion(version.version)}
+                          onClick={() => selectVersion(version.version)}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                           transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -1104,7 +1152,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                     <motion.button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveArtifact(tab.id)}
+                      onClick={() => selectTab(tab.id)}
                       className={`relative flex-1 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition-colors ${isActive
                           ? "z-20 text-primary-foreground shadow-sm"
                           : "z-10 text-muted-foreground hover:text-foreground"
@@ -1257,7 +1305,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         activeTabId={diffActiveTabId}
         tabs={codeTabs}
         onTabChange={(tabId) =>
-          setActiveArtifact(tabId as "values" | "images" | "validation")
+          selectTab(tabId as ArtifactTab)
         }
         diffContent={diffActiveContent}
         diffViewerStyles={diffViewerStyles}
