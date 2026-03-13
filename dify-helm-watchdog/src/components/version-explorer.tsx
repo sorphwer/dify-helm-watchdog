@@ -337,20 +337,23 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   // Version status from official docs (fetched async)
   const [versionStatusMap, setVersionStatusMap] = useState<Map<string, VersionStatus>>(new Map());
 
-  const defaultVersion = versions[0]?.version ?? null;
-
-  const selectVersion = useCallback(
-    (v: string) => {
-      setSelectedVersion(v);
-      updateUrl({ v: v === defaultVersion ? null : v });
-    },
-    [defaultVersion],
-  );
+  const selectVersion = useCallback((v: string) => {
+    setSelectedVersion(v);
+    updateUrl({ v });
+  }, []);
 
   const selectTab = useCallback((tab: ArtifactTab) => {
     setActiveArtifact(tab);
-    updateUrl({ tab: tab === DEFAULT_TAB ? null : tab });
+    updateUrl({ tab });
   }, []);
+
+  // Ensure URL always reflects current version and tab on initial load
+  useEffect(() => {
+    const patch: Record<string, string> = {};
+    if (selectedVersion && !searchParams.get("v")) patch.v = selectedVersion;
+    if (!searchParams.get("tab")) patch.tab = activeArtifact;
+    if (Object.keys(patch).length > 0) updateUrl(patch);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const versionMap = useMemo(() => {
     return new Map<string, StoredVersion>(
