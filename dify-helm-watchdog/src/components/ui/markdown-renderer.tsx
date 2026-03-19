@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -11,6 +12,26 @@ interface MarkdownRendererProps {
 
 const withClassName = (base: string, extra?: string) =>
   extra ? `${base} ${extra}` : base;
+
+const getTextContent = (node: ReactNode): string => {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(getTextContent).join("");
+  if (node && typeof node === "object" && "props" in node) {
+    return getTextContent(
+      (node as { props: { children?: ReactNode } }).props.children,
+    );
+  }
+  return "";
+};
+
+const slugify = (text: string): string =>
+  text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
@@ -24,32 +45,41 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            h1: ({ className: headingClass, ...props }) => (
+            h1: ({ className: headingClass, children, node: _, ...props }) => (
               <h1
                 {...props}
+                id={slugify(getTextContent(children))}
                 className={withClassName(
                   "mt-2 text-2xl font-semibold tracking-tight text-foreground",
                   headingClass,
                 )}
-              />
+              >
+                {children}
+              </h1>
             ),
-            h2: ({ className: headingClass, ...props }) => (
+            h2: ({ className: headingClass, children, node: _, ...props }) => (
               <h2
                 {...props}
+                id={slugify(getTextContent(children))}
                 className={withClassName(
                   "mt-6 text-xl font-semibold tracking-tight text-foreground",
                   headingClass,
                 )}
-              />
+              >
+                {children}
+              </h2>
             ),
-            h3: ({ className: headingClass, ...props }) => (
+            h3: ({ className: headingClass, children, node: _, ...props }) => (
               <h3
                 {...props}
+                id={slugify(getTextContent(children))}
                 className={withClassName(
                   "mt-6 text-lg font-semibold tracking-tight text-foreground",
                   headingClass,
                 )}
-              />
+              >
+                {children}
+              </h3>
             ),
             p: ({ className: paragraphClass, ...props }) => (
               <p
@@ -60,17 +90,29 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
                 )}
               />
             ),
-            a: ({ className: linkClass, ...props }) => (
-              <a
-                {...props}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={withClassName(
-                  "text-primary underline underline-offset-4 transition hover:text-primary/80",
-                  linkClass,
-                )}
-              />
-            ),
+            a: ({ className: linkClass, href, node: _, ...props }) => {
+              const isAnchor = href?.startsWith("#");
+              return (
+                <a
+                  {...props}
+                  href={href}
+                  {...(isAnchor
+                    ? {
+                        onClick: (e: React.MouseEvent<HTMLAnchorElement>) => {
+                          e.preventDefault();
+                          document
+                            .getElementById(href!.slice(1))
+                            ?.scrollIntoView({ behavior: "smooth" });
+                        },
+                      }
+                    : { target: "_blank", rel: "noopener noreferrer" })}
+                  className={withClassName(
+                    "text-primary underline underline-offset-4 transition hover:text-primary/80",
+                    linkClass,
+                  )}
+                />
+              );
+            },
             ul: ({ className: listClass, ...props }) => (
               <ul
                 {...props}
@@ -162,7 +204,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
                 />
               );
             },
-            img: ({ className: imgClass, alt, ...props }) => (
+            img: ({ className: imgClass, alt, node: _, ...props }) => (
               <img
                 {...props}
                 alt={alt ?? ""}

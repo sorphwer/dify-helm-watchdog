@@ -225,19 +225,36 @@ function updateUrl(params: Record<string, string | null>) {
 }
 
 const DOCS_BASE_URL = "https://langgenius.github.io/dify-helm/";
+const DOCS_PAGE_BASE = `${DOCS_BASE_URL}pages/`;
+
+const resolveDocsUrl = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  try {
+    return new URL(trimmed, DOCS_PAGE_BASE).href;
+  } catch {
+    return trimmed;
+  }
+};
 
 const normalizeDocsMarkdown = (content: string): string =>
-  content.replace(
-    /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi,
-    (_match, rawHref: string, label: string) => {
-      const trimmedHref = rawHref.trim();
-      const normalizedHref =
-        /^https?:\/\//i.test(trimmedHref)
-          ? trimmedHref
-          : `${DOCS_BASE_URL}${trimmedHref.replace(/^\.\//, "")}`;
-      return `[${label}](${normalizedHref})`;
-    },
-  );
+  content
+    .replace(
+      /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi,
+      (_match, rawHref: string, label: string) =>
+        `[${label}](${resolveDocsUrl(rawHref)})`,
+    )
+    .replace(/<img\s+[^>]*>/gi, (match) => {
+      const srcMatch = match.match(/src=["']([^"']+)["']/i);
+      if (!srcMatch) return match;
+      const altMatch = match.match(/alt=["']([^"']*?)["']/i);
+      return `![${altMatch?.[1] ?? ""}](${resolveDocsUrl(srcMatch[1])})`;
+    })
+    .replace(
+      /!\[([^\]]*)\]\(([^)]+)\)/g,
+      (_match, alt: string, rawSrc: string) =>
+        `![${alt}](${resolveDocsUrl(rawSrc)})`,
+    );
 
 // Helper for parsing image metadata
 const isRecord = (value: unknown): value is Record<string, unknown> =>
