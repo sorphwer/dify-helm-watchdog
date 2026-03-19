@@ -262,7 +262,7 @@ export function ImageValidationTable({
                         {record.paths.map((path) => (
                           <span
                             key={path}
-                            className="rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary"
+                            className="rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary dark:border-[#99B3FF]/30 dark:bg-[#99B3FF]/10 dark:text-[#99B3FF]"
                           >
                             {path}
                           </span>
