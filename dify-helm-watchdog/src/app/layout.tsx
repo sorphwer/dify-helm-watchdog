@@ -14,9 +14,33 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dify Helm Watchdog",
+  title: {
+    default: "Dify Helm Watchdog",
+    template: "%s | Dify Helm Watchdog",
+  },
   description:
-    "Daily snapshots of Dify Helm chart values and container images with a cyberpunk inspired interface.",
+    "Monitor Dify Helm chart versions — daily snapshots of values.yaml, container images, and image validation results.",
+  metadataBase: new URL("https://helm-watchdog.dify.ai"),
+  openGraph: {
+    title: "Dify Helm Watchdog",
+    description:
+      "Monitor Dify Helm chart versions — daily snapshots of values.yaml, container images, and image validation results.",
+    siteName: "Dify Helm Watchdog",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Dify Helm Watchdog",
+    description:
+      "Monitor Dify Helm chart versions — daily snapshots of values.yaml, container images, and image validation results.",
+  },
+  icons: {
+    icon: "/favicon.ico",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
