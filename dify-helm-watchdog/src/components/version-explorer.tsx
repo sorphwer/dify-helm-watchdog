@@ -32,6 +32,7 @@ import type {
 import { CodeBlock } from "@/components/ui/code-block";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { ImageValidationTable } from "@/components/image-validation-table";
+import { BrandLockup } from "@/components/brand-lockup";
 import { ThemeToggle } from "@/components/theme-toggle";
 import ValuesWizardModal from "@/components/modals/values-wizard-modal";
 import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
@@ -814,25 +815,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   return (
     <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
       <header className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex-1 space-y-1.5">
-          <div className="flex items-center gap-3">
-            <a
-              href="https://langgenius.github.io/dify-helm/#/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-foreground transition hover:bg-primary/20 active:bg-primary active:text-primary-foreground"
-            >
-              <ArrowUpRight className="h-2.5 w-2.5" />
-              Dify Helm
-            </a>
-            <h1 className="text-xl font-semibold text-foreground md:text-2xl">
-              Dify Helm Nightly Cheatsheet
-            </h1>
-          </div>
-          <p className="max-w-2xl text-xs text-muted-foreground md:text-sm">
-            Automatic daily snapshots of Helm chart default values and container image
-            version references to support your helm upgrade process.
-          </p>
+        <div className="mt-[17px] ml-[17px] flex-1">
+          <BrandLockup />
         </div>
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-2">
           <button

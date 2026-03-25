@@ -20,6 +20,7 @@ pnpm-lock.yaml
 
 # next.js
 /.next/
+/.next-dev/
 /out/
 .cache/
 
