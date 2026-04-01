@@ -203,6 +203,84 @@ api:
       expect(parsed.api.image.tag).toBe("0.11.0");
     });
 
+    it("enforces upstream repository rename when org prefix matches", () => {
+      const templateYaml = `
+api:
+  image:
+    repository: langgenius/dify-ee-api
+    tag: "3.9.0"
+web:
+  image:
+    repository: langgenius/dify-ee-web
+    tag: "3.9.0"
+`;
+      const overridesYaml = `
+api:
+  image:
+    repository: langgenius/dify-api
+    tag: "3.8.0"
+web:
+  image:
+    repository: langgenius/dify-web
+    tag: "3.8.0"
+`;
+      const imageMap = {
+        api: { repository: "langgenius/dify-ee-api", tag: "3.9.0" },
+        web: { repository: "langgenius/dify-ee-web", tag: "3.9.0" },
+      };
+
+      const { updatedYaml, changes } = mergeImageOverridesIntoTemplate(
+        overridesYaml,
+        templateYaml,
+        imageMap,
+      );
+      const parsed = YAML.parse(updatedYaml) as Record<string, { image: { repository: string; tag: string } }>;
+      expect(parsed.api.image.repository).toBe("langgenius/dify-ee-api");
+      expect(parsed.api.image.tag).toBe("3.9.0");
+      expect(parsed.web.image.repository).toBe("langgenius/dify-ee-web");
+      expect(parsed.web.image.tag).toBe("3.9.0");
+      expect(changes.every((c) => c.status === "updated")).toBe(true);
+    });
+
+    it("preserves custom mirror when upstream renames repos", () => {
+      const templateYaml = `
+api:
+  image:
+    repository: langgenius/dify-ee-api
+    tag: "3.9.0"
+web:
+  image:
+    repository: langgenius/dify-ee-web
+    tag: "3.9.0"
+`;
+      const overridesYaml = `
+api:
+  image:
+    repository: registry.internal.example.com/dify/dify-api
+    tag: "3.8.0"
+web:
+  image:
+    repository: registry.internal.example.com/dify/dify-web
+    tag: "3.8.0"
+`;
+      const imageMap = {
+        api: { repository: "langgenius/dify-ee-api", tag: "3.9.0" },
+        web: { repository: "langgenius/dify-ee-web", tag: "3.9.0" },
+      };
+
+      const { updatedYaml } = mergeImageOverridesIntoTemplate(
+        overridesYaml,
+        templateYaml,
+        imageMap,
+      );
+      const parsed = YAML.parse(updatedYaml) as Record<string, { image: { repository: string; tag: string } }>;
+      // Custom registry preserved (different prefix), but tags enforced from imageMap
+      expect(parsed.api.image.repository).toBe("registry.internal.example.com/dify/dify-api");
+      expect(parsed.api.image.tag).toBe("3.9.0");
+      expect(parsed.web.image.repository).toBe("registry.internal.example.com/dify/dify-web");
+      expect(parsed.web.image.tag).toBe("3.9.0");
+    });
+
     it("normalizes indentation tabs at the beginning of a line", () => {
       const raw = "\tkey: value\r\n\tchild:\n\t\t- item\n";
       const normalized = normalizeYamlInput(raw);

@@ -166,7 +166,8 @@ const findRepositoryOverride = (
 /**
  * Merge user overrides into a template values.yaml:
  * - Always enforce the latest tag from the provided image map
- * - Reuse the repository from user overrides if present (otherwise keep template)
+ * - Enforce the imageMap repository when the user's override is from the same org (upstream rename)
+ * - Preserve the user's repository when it uses a different registry/org (custom mirror)
  * - Ensure missing services/paths in overrides still exist in the output by starting from template
  */
 export const mergeImageOverridesIntoTemplate = (
@@ -209,8 +210,30 @@ export const mergeImageOverridesIntoTemplate = (
       setQuotedScalar(outputDoc, tagPath, nextTag);
       status = previousTag === nextTag ? "unchanged" : "updated";
 
+      const mapRepository = normalizeScalar((entry as ImageTagEntry).repository);
       const overrideRepository = findRepositoryOverride(overridesDoc, segments);
-      if (overrideRepository) {
+
+      if (overrideRepository && mapRepository && overrideRepository !== mapRepository) {
+        // Determine if the user's override is a custom mirror or just the old default name.
+        // Compare org/registry prefix (everything before the last "/" segment).
+        // For single-segment repos (e.g., "busybox"), lastIndexOf("/") returns -1,
+        // making both prefixes empty — imageMap wins, which is the correct behavior.
+        const overridePrefix = overrideRepository.substring(0, overrideRepository.lastIndexOf("/"));
+        const mapPrefix = mapRepository.substring(0, mapRepository.lastIndexOf("/"));
+        const isCustomRegistry = overridePrefix !== mapPrefix;
+
+        try {
+          outputDoc.setIn(repositoryPath, isCustomRegistry ? overrideRepository : mapRepository);
+        } catch {
+          // If repository cannot be set due to incompatible YAML structure, keep the template.
+        }
+      } else if (mapRepository) {
+        try {
+          outputDoc.setIn(repositoryPath, mapRepository);
+        } catch {
+          // If repository cannot be set due to incompatible YAML structure, keep the template.
+        }
+      } else if (overrideRepository) {
         try {
           outputDoc.setIn(repositoryPath, overrideRepository);
         } catch {
@@ -219,8 +242,7 @@ export const mergeImageOverridesIntoTemplate = (
       }
 
       const repoFromDoc = getScalarIn(outputDoc, repositoryPath);
-      effectiveRepository =
-        repoFromDoc ?? normalizeScalar((entry as ImageTagEntry).repository) ?? undefined;
+      effectiveRepository = repoFromDoc ?? mapRepository ?? undefined;
     } catch {
       status = "missing";
       previousTag = getScalarIn(outputDoc, tagPath);
