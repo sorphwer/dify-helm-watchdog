@@ -4,7 +4,7 @@ import Link from "next/link";
 const familySites = [
   {
     label: "Dify EE Release",
-    href: "https://ee.langgenius.workers.dev/",
+    href: "https://ee.dify.ai/",
   },
   {
     label: "Dify EE Helm",
