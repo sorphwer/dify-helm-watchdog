@@ -16,6 +16,7 @@ import {
   RefreshCw,
   ScrollText,
   Settings2,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -23,6 +24,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import type { ReactDiffViewerStylesOverride } from "react-diff-viewer";
+import semver from "semver";
 import YAML from "yaml";
 import type {
   CachePayload,
@@ -320,6 +322,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   >("idle");
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [detailsReloadKey, setDetailsReloadKey] = useState(0);
+  const [detailsHtml, setDetailsHtml] = useState<string>("");
+  const [detailsMode, setDetailsMode] = useState<"markdown" | "html">(
+    "markdown",
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadFlag, setReloadFlag] = useState(0);
@@ -417,6 +423,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   useEffect(() => {
     if (!selectedVersion) {
       setDetailsContent("");
+      setDetailsHtml("");
       setDetailsStatus("idle");
       setDetailsError(null);
       return;
@@ -429,32 +436,62 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     setDetailsStatus("loading");
     setDetailsError(null);
     setDetailsContent("");
+    setDetailsHtml("");
 
-    const docsVersion = selectedVersion.replace(/\./g, "_");
+    const isEeVersion =
+      semver.valid(selectedVersion) &&
+      semver.gte(selectedVersion, "3.9.0");
 
-    fetch(`https://langgenius.github.io/dify-helm/pages/${docsVersion}.md`, {
-      signal: controller.signal,
-    })
-      .then((res) =>
-        res.ok ? res.text() : Promise.reject(new Error(`HTTP ${res.status}`)),
-      )
-      .then((text) => {
-        if (detailsRequestRef.current !== requestId) {
-          return;
-        }
-        setDetailsContent(normalizeDocsMarkdown(text));
-        setDetailsStatus("success");
+    if (isEeVersion) {
+      setDetailsMode("html");
+      fetch(`/api/v1/releases/${selectedVersion}`, {
+        signal: controller.signal,
       })
-      .catch((thrown) => {
-        if (detailsRequestRef.current !== requestId) {
-          return;
-        }
-        if (thrown instanceof Error && thrown.name === "AbortError") {
-          return;
-        }
-        setDetailsStatus("error");
-        setDetailsError(`Failed to load details for v${selectedVersion}.`);
-      });
+        .then((res) =>
+          res.ok
+            ? (res.json() as Promise<{ html: string }>)
+            : Promise.reject(new Error(`HTTP ${res.status}`)),
+        )
+        .then((data) => {
+          if (detailsRequestRef.current !== requestId) return;
+          setDetailsHtml(data.html);
+          setDetailsStatus("success");
+        })
+        .catch((thrown) => {
+          if (detailsRequestRef.current !== requestId) return;
+          if (thrown instanceof Error && thrown.name === "AbortError") return;
+          setDetailsStatus("error");
+          setDetailsError(
+            `Failed to load release notes for v${selectedVersion}.`,
+          );
+        });
+    } else {
+      setDetailsMode("markdown");
+      const docsVersion = selectedVersion.replace(/\./g, "_");
+
+      fetch(
+        `https://langgenius.github.io/dify-helm/pages/${docsVersion}.md`,
+        { signal: controller.signal },
+      )
+        .then((res) =>
+          res.ok
+            ? res.text()
+            : Promise.reject(new Error(`HTTP ${res.status}`)),
+        )
+        .then((text) => {
+          if (detailsRequestRef.current !== requestId) return;
+          setDetailsContent(normalizeDocsMarkdown(text));
+          setDetailsStatus("success");
+        })
+        .catch((thrown) => {
+          if (detailsRequestRef.current !== requestId) return;
+          if (thrown instanceof Error && thrown.name === "AbortError") return;
+          setDetailsStatus("error");
+          setDetailsError(
+            `Failed to load details for v${selectedVersion}.`,
+          );
+        });
+    }
 
     return () => controller.abort();
   }, [selectedVersion, detailsReloadKey]);
@@ -949,6 +986,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                   const isActive = version.version === selectedVersion;
                   const showDiffIcon = !isActive && Boolean(selectedVersion);
                   const showWizardButton = isActive;
+                  const isLts = semver.valid(version.version) && semver.gte(version.version, "3.9.0");
                   return (
                     <motion.li
                       key={version.version}
@@ -995,11 +1033,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                             />
                           )}
                           {versionStatusMap.get(version.version) === "non-skippable" && (
-                            <AlertTriangle 
+                            <AlertTriangle
                               className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
-                                isActive 
-                                  ? "text-white/10" 
+                                isActive
+                                  ? "text-white/10"
                                   : "text-amber-200 dark:text-yellow-900"
+                              }`}
+                              strokeWidth={1.7}
+                            />
+                          )}
+                          {isLts && !versionStatusMap.has(version.version) && (
+                            <ShieldCheck
+                              className={`pointer-events-none absolute -right-6 -top-2 z-0 h-28 w-28 transition-all duration-200 ${
+                                isActive
+                                  ? "text-white/10"
+                                  : "text-blue-200 dark:text-blue-900"
                               }`}
                               strokeWidth={1.7}
                             />
@@ -1067,6 +1115,17 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               >
                                 <Trash2 className="h-2.5 w-2.5" />
                                 Deprecated
+                              </span>
+                            )}
+                            {isLts && (
+                              <span
+                                className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[10px] font-semibold tracking-normal ${isActive
+                                    ? "bg-white/20 text-primary-foreground"
+                                    : "bg-blue-100 text-[#1B4DFF] dark:bg-blue-950 dark:text-blue-400"
+                                  }`}
+                              >
+                                <ShieldCheck className="h-2.5 w-2.5" />
+                                LTS
                               </span>
                             )}
                           </div>
@@ -1254,10 +1313,17 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                   />
                 ) : activeTab.type === "markdown" ? (
                   detailsStatus === "success" ? (
-                    <MarkdownRenderer
-                      content={detailsContent}
-                      className="h-full w-full"
-                    />
+                    detailsMode === "html" ? (
+                      <div
+                        className="ee-release-notes custom-scrollbar h-full w-full overflow-auto rounded-2xl border border-border bg-card/30 px-2 py-4"
+                        dangerouslySetInnerHTML={{ __html: detailsHtml }}
+                      />
+                    ) : (
+                      <MarkdownRenderer
+                        content={detailsContent}
+                        className="h-full w-full"
+                      />
+                    )
                   ) : detailsStatus === "loading" || detailsStatus === "idle" ? (
                     <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card/30">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
