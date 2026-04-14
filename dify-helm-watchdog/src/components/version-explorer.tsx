@@ -348,6 +348,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [diffError, setDiffError] = useState<string | null>(null);
   const diffRequestRef = useRef(0);
   const detailsRequestRef = useRef(0);
+  const detailsCacheRef = useRef<
+    Map<string, { mode: "markdown" | "html"; content: string }>
+  >(new Map());
 
   // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -429,6 +432,19 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       return;
     }
 
+    // Check in-memory cache first
+    const cached = detailsCacheRef.current.get(selectedVersion);
+    if (cached) {
+      setDetailsMode(cached.mode);
+      if (cached.mode === "html") {
+        setDetailsHtml(cached.content);
+      } else {
+        setDetailsContent(cached.content);
+      }
+      setDetailsStatus("success");
+      return;
+    }
+
     const controller = new AbortController();
     const requestId = detailsRequestRef.current + 1;
     detailsRequestRef.current = requestId;
@@ -454,6 +470,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         )
         .then((data) => {
           if (detailsRequestRef.current !== requestId) return;
+          detailsCacheRef.current.set(selectedVersion, {
+            mode: "html",
+            content: data.html,
+          });
           setDetailsHtml(data.html);
           setDetailsStatus("success");
         })
@@ -480,7 +500,12 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         )
         .then((text) => {
           if (detailsRequestRef.current !== requestId) return;
-          setDetailsContent(normalizeDocsMarkdown(text));
+          const normalized = normalizeDocsMarkdown(text);
+          detailsCacheRef.current.set(selectedVersion, {
+            mode: "markdown",
+            content: normalized,
+          });
+          setDetailsContent(normalized);
           setDetailsStatus("success");
         })
         .catch((thrown) => {
