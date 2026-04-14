@@ -240,3 +240,240 @@ body {
     background-position: 200% 0;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   ee.dify.ai release notes — scoped Tailwind utility shim
+   The injected HTML uses Dify's custom Tailwind tokens that
+   don't exist in watchdog's config. We replicate them here,
+   scoped under .ee-release-notes so they never leak.
+   ────────────────────────────────────────────────────────────── */
+
+.ee-release-notes {
+  /* ── Design tokens ─────────────────────────────────────── */
+  --dify-xs: 4px;
+  --dify-sm: 8px;
+  --dify-md: 12px;
+  --dify-lg: 16px;
+  --dify-xl: 20px;
+  --dify-2xl: 32px;
+
+  /* Colors mapped to watchdog theme */
+  --dify-text-primary: var(--color-foreground);
+  --dify-text-secondary: var(--color-muted-foreground);
+  --dify-text-tertiary: color-mix(in oklch, var(--color-muted-foreground) 70%, transparent);
+  --dify-text-quaternary: color-mix(in oklch, var(--color-muted-foreground) 50%, transparent);
+  --dify-text-link: var(--color-primary);
+  --dify-bg-primary: var(--color-card);
+  --dify-bg-secondary: var(--color-secondary);
+  --dify-bg-tertiary: var(--color-muted);
+  --dify-bg-card: var(--color-card);
+  --dify-bg-toggle: var(--color-muted);
+  --dify-border-primary: var(--color-border);
+  --dify-border-secondary: color-mix(in oklch, var(--color-border) 60%, transparent);
+  --dify-brand: var(--color-primary);
+  --dify-brand-deep: var(--color-primary);
+  --dify-success: var(--color-success);
+  --dify-success-bg: color-mix(in oklch, var(--color-success) 15%, transparent);
+  --dify-danger: var(--color-destructive);
+  --dify-danger-row-bg: color-mix(in oklch, var(--color-destructive) 10%, transparent);
+  --dify-warning: var(--color-warning);
+  --dify-code-command: var(--color-foreground);
+  --dify-code-comment: var(--color-muted-foreground);
+  --dify-code-prompt: var(--color-primary);
+
+  line-height: 1.6;
+  max-width: 100%;
+}
+
+/* ── Layout utilities ──────────────────────────────────────── */
+.ee-release-notes .flex { display: flex; }
+.ee-release-notes .flex-col { flex-direction: column; }
+.ee-release-notes .flex-1 { flex: 1 1 0%; }
+.ee-release-notes .items-center { align-items: center; }
+.ee-release-notes .items-start { align-items: flex-start; }
+.ee-release-notes .justify-between { justify-content: space-between; }
+.ee-release-notes .justify-center { justify-content: center; }
+.ee-release-notes .shrink-0 { flex-shrink: 0; }
+.ee-release-notes .overflow-hidden { overflow: hidden; }
+.ee-release-notes .inline-block { display: inline-block; }
+
+/* ── Gap ───────────────────────────────────────────────────── */
+.ee-release-notes .gap-xs { gap: var(--dify-xs); }
+.ee-release-notes .gap-sm { gap: var(--dify-sm); }
+.ee-release-notes .gap-md { gap: var(--dify-md); }
+.ee-release-notes .gap-lg { gap: var(--dify-lg); }
+.ee-release-notes .gap-xl { gap: var(--dify-xl); }
+.ee-release-notes .gap-2xl { gap: var(--dify-2xl); }
+.ee-release-notes .gap-\[9px\] { gap: 9px; }
+.ee-release-notes .gap-\[20px\] { gap: 20px; }
+.ee-release-notes .gap-\[40px\] { gap: 40px; }
+
+/* ── Padding ───────────────────────────────────────────────── */
+.ee-release-notes .p-xl { padding: var(--dify-xl); }
+.ee-release-notes .px-sm { padding-left: var(--dify-sm); padding-right: var(--dify-sm); }
+.ee-release-notes .px-md { padding-left: var(--dify-md); padding-right: var(--dify-md); }
+.ee-release-notes .px-lg { padding-left: var(--dify-lg); padding-right: var(--dify-lg); }
+.ee-release-notes .px-xl { padding-left: var(--dify-xl); padding-right: var(--dify-xl); }
+.ee-release-notes .px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
+.ee-release-notes .py-xs { padding-top: var(--dify-xs); padding-bottom: var(--dify-xs); }
+.ee-release-notes .py-md { padding-top: var(--dify-md); padding-bottom: var(--dify-md); }
+.ee-release-notes .py-lg { padding-top: var(--dify-lg); padding-bottom: var(--dify-lg); }
+.ee-release-notes .py-xl { padding-top: var(--dify-xl); padding-bottom: var(--dify-xl); }
+.ee-release-notes .py-2xl { padding-top: var(--dify-2xl); padding-bottom: var(--dify-2xl); }
+.ee-release-notes .pt-md { padding-top: var(--dify-md); }
+.ee-release-notes .pb-lg { padding-bottom: var(--dify-lg); }
+.ee-release-notes .pl-md { padding-left: var(--dify-md); }
+.ee-release-notes .pl-xl { padding-left: var(--dify-xl); }
+.ee-release-notes .pr-lg { padding-right: var(--dify-lg); }
+.ee-release-notes .pr-xl { padding-right: var(--dify-xl); }
+.ee-release-notes .px-\[13px\] { padding-left: 13px; padding-right: 13px; }
+.ee-release-notes .px-\[25px\] { padding-left: 25px; padding-right: 25px; }
+.ee-release-notes .py-\[2px\] { padding-top: 2px; padding-bottom: 2px; }
+.ee-release-notes .py-\[5px\] { padding-top: 5px; padding-bottom: 5px; }
+.ee-release-notes .py-\[17px\] { padding-top: 17px; padding-bottom: 17px; }
+.ee-release-notes .py-\[20px\] { padding-top: 20px; padding-bottom: 20px; }
+.ee-release-notes .pl-\[26px\] { padding-left: 26px; }
+
+/* ── Margin ────────────────────────────────────────────────── */
+.ee-release-notes .m-0 { margin: 0; }
+.ee-release-notes .mx-auto { margin-left: auto; margin-right: auto; }
+.ee-release-notes .mb-\[20px\] { margin-bottom: 20px; }
+
+/* ── Width / Height ────────────────────────────────────────── */
+.ee-release-notes .w-\[960px\] { width: 100%; }
+.ee-release-notes .w-\[120px\] { width: 120px; }
+.ee-release-notes .w-\[18px\] { width: 18px; }
+.ee-release-notes .w-\[20px\] { width: 20px; }
+.ee-release-notes .w-sm { width: var(--dify-sm); }
+.ee-release-notes .h-px { height: 1px; }
+.ee-release-notes .h-sm { height: var(--dify-sm); }
+.ee-release-notes .h-2xl { height: var(--dify-2xl); }
+.ee-release-notes .h-\[18px\] { height: 18px; }
+.ee-release-notes .h-\[20px\] { height: 20px; }
+.ee-release-notes .max-w-full { max-width: 100%; }
+
+/* ── Typography ────────────────────────────────────────────── */
+.ee-release-notes .font-medium { font-weight: 500; }
+.ee-release-notes .font-mono { font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); }
+.ee-release-notes .uppercase { text-transform: uppercase; }
+.ee-release-notes .whitespace-nowrap { white-space: nowrap; }
+.ee-release-notes .text-left { text-align: left; }
+.ee-release-notes .no-underline { text-decoration: none; }
+.ee-release-notes .hover\:underline:hover { text-decoration: underline; }
+.ee-release-notes .leading-none { line-height: 1; }
+.ee-release-notes .leading-\[1\.1\] { line-height: 1.1; }
+.ee-release-notes .leading-\[1\.3\] { line-height: 1.3; }
+.ee-release-notes .leading-\[1\.4\] { line-height: 1.4; }
+.ee-release-notes .leading-\[1\.6\] { line-height: 1.6; }
+.ee-release-notes .leading-\[20\.8px\] { line-height: 20.8px; }
+.ee-release-notes .tracking-\[0\.07px\] { letter-spacing: 0.07px; }
+.ee-release-notes .tracking-\[0\.6px\] { letter-spacing: 0.6px; }
+.ee-release-notes .tracking-\[0\.96px\] { letter-spacing: 0.96px; }
+
+/* Font sizes */
+.ee-release-notes .text-\[12px\] { font-size: 12px; }
+.ee-release-notes .text-\[13px\] { font-size: 13px; }
+.ee-release-notes .text-\[14px\] { font-size: 14px; }
+.ee-release-notes .text-\[16px\] { font-size: 16px; }
+.ee-release-notes .text-\[20px\] { font-size: 20px; }
+
+/* ── Text colors ───────────────────────────────────────────── */
+.ee-release-notes .text-dify-text-primary { color: var(--dify-text-primary); }
+.ee-release-notes .text-dify-text-secondary { color: var(--dify-text-secondary); }
+.ee-release-notes .text-dify-text-tertiary { color: var(--dify-text-tertiary); }
+.ee-release-notes .text-dify-text-quaternary { color: var(--dify-text-quaternary); }
+.ee-release-notes .text-dify-text-link { color: var(--dify-text-link); }
+.ee-release-notes .text-dify-success { color: var(--dify-success); }
+.ee-release-notes .text-dify-danger { color: var(--dify-danger); }
+.ee-release-notes .text-dify-warning { color: var(--dify-warning); }
+.ee-release-notes .text-dify-code-command { color: var(--dify-code-command); }
+.ee-release-notes .text-dify-code-comment { color: var(--dify-code-comment); }
+.ee-release-notes .text-dify-code-prompt { color: var(--dify-code-prompt); }
+
+/* ── Background colors ─────────────────────────────────────── */
+.ee-release-notes .bg-dify-bg-primary { background-color: var(--dify-bg-primary); }
+.ee-release-notes .bg-dify-bg-secondary { background-color: var(--dify-bg-secondary); }
+.ee-release-notes .bg-dify-bg-tertiary { background-color: var(--dify-bg-tertiary); }
+.ee-release-notes .bg-dify-bg-card { background-color: var(--dify-bg-card); }
+.ee-release-notes .bg-dify-bg-toggle { background-color: var(--dify-bg-toggle); }
+.ee-release-notes .bg-dify-success-bg { background-color: var(--dify-success-bg); }
+.ee-release-notes .bg-dify-success { background-color: var(--dify-success); }
+.ee-release-notes .bg-dify-danger-row-bg { background-color: var(--dify-danger-row-bg); }
+.ee-release-notes .bg-transparent { background-color: transparent; }
+.ee-release-notes .bg-util-colors-blue-brand-50 { background-color: color-mix(in oklch, var(--dify-brand) 12%, var(--dify-bg-secondary)); }
+
+/* ── Border colors ─────────────────────────────────────────── */
+.ee-release-notes .border-dify-border-primary { border-color: var(--dify-border-primary); }
+.ee-release-notes .border-dify-border-secondary { border-color: var(--dify-border-secondary); }
+.ee-release-notes .border-dify-brand { border-color: var(--dify-brand); }
+.ee-release-notes .border-dify-text-link { border-color: var(--dify-text-link); }
+.ee-release-notes .border-dify-success { border-color: var(--dify-success); }
+
+/* ── Borders ───────────────────────────────────────────────── */
+.ee-release-notes .border { border-width: 1px; border-style: solid; }
+.ee-release-notes .border-0 { border-width: 0; }
+.ee-release-notes .border-t { border-top-width: 1px; border-top-style: solid; }
+.ee-release-notes .border-l-2 { border-left-width: 2px; border-left-style: solid; }
+.ee-release-notes .border-l-3 { border-left-width: 3px; border-left-style: solid; }
+
+/* ── Border radius ─────────────────────────────────────────── */
+.ee-release-notes .rounded-sm { border-radius: 4px; }
+.ee-release-notes .rounded-full { border-radius: 9999px; }
+.ee-release-notes .rounded-\[8px\] { border-radius: 8px; }
+
+/* ── Misc ──────────────────────────────────────────────────── */
+.ee-release-notes .opacity-90 { opacity: 0.9; }
+.ee-release-notes .cursor-pointer { cursor: pointer; }
+.ee-release-notes .transition-transform { transition: transform 0.2s ease; }
+
+/* ── Links ─────────────────────────────────────────────────── */
+.ee-release-notes a {
+  color: var(--dify-text-link);
+  text-underline-offset: 2px;
+}
+
+/* ── Code blocks ───────────────────────────────────────────── */
+.ee-release-notes pre {
+  margin: 0;
+  overflow-x: auto;
+}
+
+.ee-release-notes code {
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+
+/* ── Nested list styling for expandable sections ───────────── */
+.ee-release-notes .language-yaml {
+  white-space: pre;
+  display: block;
+}
+
+/* ── Upgrade Guide body text: bump from tertiary to readable ─ */
+.ee-release-notes .text-dify-text-tertiary p,
+.ee-release-notes .text-dify-text-tertiary li {
+  color: var(--dify-text-secondary);
+}
+
+.ee-release-notes .text-dify-text-tertiary strong {
+  color: var(--dify-text-primary);
+}
+
+.ee-release-notes .text-dify-text-tertiary code {
+  color: var(--dify-text-primary);
+  background: var(--dify-bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.ee-release-notes .text-dify-text-tertiary ul {
+  padding-left: var(--dify-xl);
+  margin: var(--dify-md) 0;
+}
+
+.ee-release-notes .text-dify-text-tertiary li {
+  margin: var(--dify-xs) 0;
+}
+
+/* ── SVG icons inherit text color ──────────────────────────── */
+.ee-release-notes svg { fill: currentColor; }
