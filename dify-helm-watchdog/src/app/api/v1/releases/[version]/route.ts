@@ -1,79 +1,7 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
+import { sanitizeEeReleaseHtml } from "@/lib/release-notes";
 
 export const runtime = "nodejs";
-
-const TARGET_CLASS =
-  'w-[960px] max-w-full mx-auto px-5 py-2xl flex flex-col gap-2xl';
-
-/**
- * Extract the target div (and its children) from raw HTML using nested-tag
- * counting so that inner `<div>` elements don't break the extraction.
- */
-function extractTargetDiv(html: string): string | null {
-  const needle = `class="${TARGET_CLASS}"`;
-  const classIdx = html.indexOf(needle);
-  if (classIdx === -1) return null;
-
-  // Walk backwards to find the opening `<div`
-  const openTag = html.lastIndexOf("<div", classIdx);
-  if (openTag === -1) return null;
-
-  // Walk forward counting open/close div tags
-  let depth = 0;
-  const divOpen = /<div[\s>]/gi;
-  const divClose = /<\/div\s*>/gi;
-
-  // Merge open and close positions into a sorted list
-  type TagHit = { pos: number; isOpen: boolean };
-  const hits: TagHit[] = [];
-
-  divOpen.lastIndex = openTag;
-  let m: RegExpExecArray | null;
-  while ((m = divOpen.exec(html)) !== null) {
-    hits.push({ pos: m.index, isOpen: true });
-  }
-  divClose.lastIndex = openTag;
-  while ((m = divClose.exec(html)) !== null) {
-    hits.push({ pos: m.index, isOpen: false });
-  }
-  hits.sort((a, b) => a.pos - b.pos);
-
-  for (const hit of hits) {
-    depth += hit.isOpen ? 1 : -1;
-    if (depth === 0) {
-      // Find the `>` that closes `</div>`
-      const end = html.indexOf(">", hit.pos) + 1;
-      return html.slice(openTag, end);
-    }
-  }
-
-  return null;
-}
-
-/**
- * Strip script tags from HTML for safety.
- */
-function stripScripts(html: string): string {
-  return html.replace(/<script[\s\S]*?<\/script\s*>/gi, "");
-}
-
-const EE_ORIGIN = "https://ee.dify.ai";
-
-/**
- * Rewrite relative hrefs and srcs to absolute ee.dify.ai URLs
- * and open them in a new tab.
- */
-function rewriteLinks(html: string): string {
-  return html.replace(
-    /(<a\s[^>]*?)href="(\/[^"]*)"([^>]*>)/gi,
-    (_match, before: string, path: string, after: string) =>
-      `${before}href="${EE_ORIGIN}${path}" target="_blank" rel="noopener noreferrer"${after}`,
-  ).replace(
-    /(<img\s[^>]*?)src="(\/[^"]*)"([^>]*>)/gi,
-    (_match, before: string, path: string, after: string) =>
-      `${before}src="${EE_ORIGIN}${path}"${after}`,
-  );
-}
 
 /**
  * @swagger
@@ -132,9 +60,9 @@ export async function GET(
     }
 
     const html = await res.text();
-    const extracted = extractTargetDiv(html);
+    const sanitised = sanitizeEeReleaseHtml(html);
 
-    if (!extracted) {
+    if (!sanitised) {
       return createErrorResponse({
         request,
         status: 502,
@@ -142,8 +70,6 @@ export async function GET(
         statusText: "UNAVAILABLE",
       });
     }
-
-    const sanitised = rewriteLinks(stripScripts(extracted));
 
     return createJsonResponse(
       { version, html: sanitised },

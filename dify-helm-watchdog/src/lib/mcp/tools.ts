@@ -4,6 +4,10 @@
  */
 
 import { loadCache } from "@/lib/helm";
+import {
+  ReleaseNotesError,
+  fetchReleaseNotesAsMarkdown,
+} from "@/lib/release-notes";
 import type { ImageValidationRecord, StoredVersion } from "@/lib/types";
 import { countValidationStatuses, normalizeValidationPayload } from "@/lib/validation";
 import YAML from "yaml";
@@ -69,6 +73,21 @@ export const TOOLS: McpToolDefinition[] = [
           type: "boolean",
           description:
             "When true, includes validation status and variant information for each image.",
+        },
+      },
+      required: ["version"],
+    },
+  },
+  {
+    name: "get_version_release_notes",
+    description:
+      "Returns the release notes (Details tab content) for a specific Helm chart version as Markdown. For versions >= 3.9.0 the content comes from ee.dify.ai (HTML converted to Markdown); for older versions it comes from the Dify Helm docs site (native Markdown, normalised).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        version: {
+          type: "string",
+          description: "The chart version to fetch release notes for (e.g., '3.9.0' or '1.5.0').",
         },
       },
       required: ["version"],
@@ -404,6 +423,27 @@ const validateImages = async (
   return jsonResult(validationData);
 };
 
+const getVersionReleaseNotes = async (
+  args: Record<string, unknown>,
+): Promise<McpToolResult> => {
+  const version = String(args.version ?? "");
+  if (!version) {
+    return errorResult("Missing required parameter: version");
+  }
+
+  try {
+    const notes = await fetchReleaseNotesAsMarkdown(version);
+    return jsonResult(notes);
+  } catch (error) {
+    if (error instanceof ReleaseNotesError) {
+      return errorResult(error.message);
+    }
+    return errorResult(
+      `Failed to fetch release notes for v${version}: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
+};
+
 // Tool executor
 export const executeTool = async (
   name: string,
@@ -420,6 +460,8 @@ export const executeTool = async (
       return listImages(args);
     case "validate_images":
       return validateImages(args);
+    case "get_version_release_notes":
+      return getVersionReleaseNotes(args);
     default:
       return errorResult(`Unknown tool: ${name}`);
   }
