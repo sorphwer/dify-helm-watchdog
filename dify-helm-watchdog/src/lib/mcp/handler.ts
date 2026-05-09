@@ -5,6 +5,7 @@
 
 import { TOOLS, executeTool } from "./tools";
 import { listPrompts, getPrompt } from "./prompts";
+import { trackEvent } from "@/lib/analytics/track";
 import {
   JSON_RPC_ERRORS,
   MCP_PROTOCOL_VERSION,
@@ -99,6 +100,7 @@ const handleToolsList = (id: string | number | undefined): JsonRpcResponse => {
 const handleToolsCall = async (
   id: string | number | undefined,
   params: McpToolCallParams,
+  sessionHash?: string,
 ): Promise<JsonRpcResponse> => {
   if (!params?.name) {
     return createErrorResponse(
@@ -117,10 +119,27 @@ const handleToolsCall = async (
     );
   }
 
+  const start = Date.now();
   try {
     const result = await executeTool(params.name, params.arguments ?? {});
+    if (sessionHash) {
+      void trackEvent({
+        kind: "mcp",
+        name: params.name,
+        sessionHash,
+        latencyMs: Date.now() - start,
+      });
+    }
     return createResponse(id, result);
   } catch (error) {
+    if (sessionHash) {
+      void trackEvent({
+        kind: "mcp",
+        name: params.name,
+        sessionHash,
+        latencyMs: Date.now() - start,
+      });
+    }
     return createErrorResponse(
       id,
       JSON_RPC_ERRORS.INTERNAL_ERROR,
@@ -163,6 +182,7 @@ const handlePromptsGet = (
 // Main message handler
 export const handleMessage = async (
   message: unknown,
+  sessionHash?: string,
 ): Promise<JsonRpcResponse | null> => {
   // Validate request format
   if (!isValidRequest(message)) {
@@ -203,7 +223,11 @@ export const handleMessage = async (
       return handleToolsList(id);
 
     case "tools/call":
-      return handleToolsCall(id, (params ?? {}) as unknown as McpToolCallParams);
+      return handleToolsCall(
+        id,
+        (params ?? {}) as unknown as McpToolCallParams,
+        sessionHash,
+      );
 
     case "prompts/list":
       return handlePromptsList(id);
@@ -223,10 +247,11 @@ export const handleMessage = async (
 // Parse and handle a JSON message string
 export const handleJsonMessage = async (
   jsonString: string,
+  sessionHash?: string,
 ): Promise<JsonRpcResponse | null> => {
   try {
     const message = JSON.parse(jsonString) as unknown;
-    return handleMessage(message);
+    return handleMessage(message, sessionHash);
   } catch {
     return createErrorResponse(
       undefined,
