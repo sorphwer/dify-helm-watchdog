@@ -9,6 +9,7 @@
 import { createSession, getSession, touchSession, deleteSession } from "@/lib/mcp/session";
 import { handleJsonMessage, formatSseEvent } from "@/lib/mcp/handler";
 import { createErrorResponse } from "@/lib/api/response";
+import { computeSessionHashFromRequest } from "@/lib/analytics/session";
 
 export const runtime = "nodejs";
 
@@ -146,7 +147,8 @@ export async function POST(request: Request) {
     }
 
     // Process the message
-    const response = await handleJsonMessage(body);
+    const sessionHash = await computeSessionHashFromRequest(request);
+    const response = await handleJsonMessage(body, sessionHash);
 
     // If sessionId is provided and we have an active SSE connection, send via SSE
     if (sessionId) {

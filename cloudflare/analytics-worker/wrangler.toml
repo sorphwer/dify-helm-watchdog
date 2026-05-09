@@ -1,0 +1,28 @@
+# Cloudflare Worker that ingests analytics events for dify-helm-watchdog
+# and exposes a query endpoint for the public /dashboard page.
+#
+# Setup checklist (one-time):
+#   1. wrangler login
+#   2. Replace YOUR-DOMAIN.com below with your real apex domain
+#   3. wrangler secret put ANALYTICS_WORKER_SECRET   # shared with Vercel for HMAC
+#   4. wrangler secret put CF_ACCOUNT_ID             # for Analytics Engine SQL API
+#   5. wrangler secret put CF_ANALYTICS_TOKEN        # API token, scope: Account Analytics:Read
+#   6. wrangler deploy
+
+name = "dify-watchdog-analytics"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Analytics Engine binding for writes. Reads go through the SQL API (see secrets above).
+[[analytics_engine_datasets]]
+binding = "EVENTS"
+dataset = "dify_watchdog_events"
+
+# Custom domain. Replace YOUR-DOMAIN.com with the apex zone you own in Cloudflare.
+# Workers will create the DNS record automatically once the zone is in your account.
+[[routes]]
+pattern = "analytics.YOUR-DOMAIN.com"
+custom_domain = true
+
+[observability]
+enabled = true
