@@ -260,7 +260,7 @@ describe("POST /api/v1/cron", () => {
 
   it("should handle MissingBlobTokenError gracefully", async () => {
     mockedSyncHelmData.mockRejectedValueOnce(
-      new MissingBlobTokenError("Blob storage token is not configured"),
+      new MissingBlobTokenError(),
     );
 
     const request = new Request("http://localhost/api/v1/cron", {
