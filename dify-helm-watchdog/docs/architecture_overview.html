@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>dify-helm-watchdog · 架构总览</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --ink: #0f172a;
+    --muted: #475569;
+    --subtle: #94a3b8;
+    --line: #cbd5e1;
+
+    --done-fill: #e7f8ef; --done-border: #10b981; --done-dot: #10b981;
+    --wip-fill:  #d3f5ea; --wip-border:  #14b8a6; --wip-dot:  #0d9488;
+    --plan-fill: #efe9fe; --plan-border: #8b5cf6; --plan-dot: #7c3aed;
+
+    --store-fill: #f3f4f6; --store-border: #9ca3af;
+    --core-fill:  #ccfbf1; --core-border:  #0d9488;
+    --rrf-fill:   #ffedd5; --rrf-border:   #ea580c;
+    --orch-fill:  #ecfeff; --orch-border:  #0891b2;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 13px; line-height: 1.45;
+  }
+
+  .board {
+    max-width: 1760px; margin: 24px auto; padding: 24px 28px 36px;
+    background: #fff; border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 30px rgba(15,23,42,.05);
+    position: relative;
+  }
+
+  .connections {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 1; overflow: visible;
+  }
+  .connections path {
+    fill: none; stroke: #94a3b8; stroke-width: 1.4;
+    stroke-dasharray: 5 4; opacity: .75;
+  }
+  .connections path.strong { stroke: #475569; opacity: .85; stroke-width: 1.7; }
+  .connections .arrowhead { fill: #94a3b8; }
+  .row, header.top, .footer-note { position: relative; z-index: 2; }
+
+  header.top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  header.top h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
+  header.top .sub { color: var(--muted); margin-left: 10px; font-size: 12px; }
+
+  .legend {
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 12px; color: var(--muted); align-items: flex-end;
+  }
+  .legend-group {
+    display: flex; gap: 14px; align-items: center;
+    flex-wrap: wrap; justify-content: flex-end;
+  }
+  .legend-title {
+    color: var(--ink); font-weight: 600; font-size: 11px;
+    letter-spacing: .5px; min-width: 40px;
+  }
+  .legend .item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0,0,0,.06);
+  }
+  .dot.done { background: var(--done-dot); }
+  .dot.wip  { background: var(--wip-dot); }
+  .dot.plan {
+    background: var(--plan-fill);
+    border: 1.5px dashed var(--plan-border);
+    box-shadow: none; width: 12px; height: 12px;
+  }
+  .swatch {
+    display: inline-block; width: 14px; height: 10px;
+    border-radius: 3px; border: 1.5px solid transparent;
+  }
+  .swatch.store { background: var(--store-fill); border-color: var(--store-border); }
+  .swatch.core  { background: var(--core-fill);  border-color: var(--core-border); }
+  .swatch.orch  { background: var(--orch-fill);  border-color: var(--orch-border); }
+  .swatch.rrf   { background: var(--rrf-fill);   border-color: var(--rrf-border); }
+
+  .row {
+    display: grid; grid-template-columns: 130px 1fr;
+    gap: 16px; margin-bottom: 56px; align-items: stretch;
+  }
+  .row:last-of-type { margin-bottom: 14px; }
+  .row-label {
+    color: var(--muted); font-size: 13px; padding-top: 10px;
+    white-space: nowrap; letter-spacing: .3px;
+  }
+  .row-label .num { color: var(--ink); font-weight: 600; margin-right: 4px; }
+
+  .cards { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; }
+
+  .card {
+    position: relative; min-width: 180px; max-width: 240px; flex: 1 1 190px;
+    padding: 12px 14px; border: 1.5px solid var(--done-border);
+    background: var(--done-fill); border-radius: 14px;
+    box-shadow: 0 1px 0 rgba(15,23,42,.03);
+  }
+  .card .title { font-weight: 600; font-size: 14px; margin-bottom: 4px; letter-spacing: .2px; }
+  .card .desc  { color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .card code {
+    font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11px;
+    color: #334155; background: rgba(15,23,42,.04);
+    padding: 1px 4px; border-radius: 4px;
+  }
+  .card .status {
+    position: absolute; top: 10px; right: 10px;
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  .card.done { background: var(--done-fill); border-color: var(--done-border); }
+  .card.done .status { background: var(--done-dot); }
+  .card.wip  { background: var(--wip-fill);  border-color: var(--wip-border); }
+  .card.wip  .status { background: var(--wip-dot); }
+  .card.plan { background: var(--plan-fill); border: 1.5px dashed var(--plan-border); }
+  .card.plan .status { background: var(--plan-dot); }
+
+  .card.store { background: var(--store-fill); border-color: var(--store-border); }
+  .card.store .status { background: #9ca3af; }
+  .card.core  {
+    background: var(--core-fill); border-color: var(--core-border);
+    min-width: 260px; max-width: 300px;
+  }
+  .card.core .status { background: var(--wip-dot); }
+  .card.orch  {
+    background: var(--orch-fill); border-color: var(--orch-border);
+    min-width: 240px; max-width: 280px;
+  }
+  .card.orch .status { background: var(--orch-border); }
+  .card.rrf   { background: var(--rrf-fill); border-color: var(--rrf-border); }
+  .card.rrf .status { background: var(--rrf-border); }
+
+  .card .tag {
+    display: inline-block; margin-top: 6px;
+    font-size: 11px; color: #0369a1;
+    background: rgba(14,165,233,.1);
+    padding: 1px 6px; border-radius: 4px;
+  }
+
+  .arrow {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--subtle); font-size: 22px; font-weight: 300;
+    padding: 0 2px; user-select: none; min-width: 14px;
+  }
+  .arrow.fan   { color: var(--orch-border); font-size: 20px; }
+  .arrow.merge { color: var(--rrf-border);  font-size: 20px; }
+  .arrow.soft  { color: var(--subtle); font-size: 14px; }
+
+  .divider {
+    width: 1px; background: var(--line); margin: 4px 6px; align-self: stretch;
+  }
+  .divider-label {
+    display: flex; align-items: center; color: var(--subtle);
+    font-size: 11px; letter-spacing: 1px; padding: 0 2px;
+  }
+
+  .footer-note {
+    margin-top: 14px; color: var(--muted); font-size: 11.5px;
+    border-top: 1px dashed var(--line); padding-top: 10px;
+    display: flex; flex-wrap: wrap; gap: 18px;
+  }
+  .footer-note b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="board">
+  <svg class="connections" aria-hidden="true">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 Z" class="arrowhead" />
+      </marker>
+      <marker id="arr-strong" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 Z" fill="#475569" />
+      </marker>
+    </defs>
+  </svg>
+
+  <header class="top">
+    <div>
+      <h1>dify-helm-watchdog · 系统架构总览<span class="sub">Next.js 15 · React 19 · Vercel Blob · MCP · Cloudflare Analytics Engine · 每日快照 Dify Helm Chart</span></h1>
+    </div>
+    <div class="legend">
+      <div class="legend-group">
+        <span class="legend-title">状态</span>
+        <div class="item"><span class="dot done"></span>已实现</div>
+        <div class="item"><span class="dot wip"></span>进行中</div>
+        <div class="item"><span class="dot plan"></span>规划中（虚线边框）</div>
+      </div>
+      <div class="legend-group">
+        <span class="legend-title">角色</span>
+        <div class="item"><span class="swatch store"></span>存储 / 外部数据源</div>
+        <div class="item"><span class="swatch core"></span>核心存储</div>
+        <div class="item"><span class="swatch orch"></span>调度器 / 分发器</div>
+        <div class="item"><span class="swatch rrf"></span>融合 / 聚合</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ① 上游数据源 — parallel external systems (· soft) -->
+  <div class="row">
+    <div class="row-label"><span class="num">①</span>上游</div>
+    <div class="cards">
+      <div class="card store" id="card-helm-index">
+        <div class="status"></div>
+        <div class="title">Helm Index</div>
+        <div class="desc"><code>langgenius.github.io/dify-helm/index.yaml</code> · 版本清单</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card store" id="card-helm-chart">
+        <div class="status"></div>
+        <div class="title">Chart Tarball</div>
+        <div class="desc">每版本 <code>.tgz</code>，通过 <code>tar-stream + gunzip</code> 提取 <code>values.yaml</code></div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card store" id="card-coding-reg">
+        <div class="status"></div>
+        <div class="title">Coding 镜像仓库</div>
+        <div class="desc"><code>g-hsod9681-docker.pkg.coding.net/dify-artifact/dify</code> · 对 3 种变体查询 manifest：<code>ORIGINAL / AMD64 / ARM64</code></div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card store" id="card-ee-release">
+        <div class="status"></div>
+        <div class="title">ee.dify.ai</div>
+        <div class="desc">v ≥ 3.9.0 的 Release 页 HTML，经裁剪后由 <code>turndown</code> 转 Markdown</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card store" id="card-docs-site">
+        <div class="status"></div>
+        <div class="title">Helm Docs</div>
+        <div class="desc"><code>dify-helm/pages/{x_y_z}.md</code> · v &lt; 3.9.0 的原生 Markdown</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card store" id="card-dify-api">
+        <div class="status"></div>
+        <div class="title">Dify API</div>
+        <div class="desc"><code>api.dify.ai/v1/workflows/logs</code> · 需 <code>DIFY_API_KEY</code>，超时 30s</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 调度流水线 — sequential pipeline (→) -->
+  <div class="row">
+    <div class="row-label"><span class="num">②</span>调度</div>
+    <div class="cards">
+      <div class="card done" id="card-vercel-cron">
+        <div class="status"></div>
+        <div class="title">Vercel Cron</div>
+        <div class="desc">每日 UTC 02:00 触发 <code>"0 2 * * *"</code>（<code>vercel.json</code>），通过 <code>x-vercel-cron</code> 头免鉴权</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card done" id="card-cron-route">
+        <div class="status"></div>
+        <div class="title">POST /api/v1/cron</div>
+        <div class="desc">流式 <code>text/plain</code> 输出 <code>[sync]/[result]/[status]</code>；支持 <code>?version=</code> 强制刷新与 <code>?pause=</code>（≤300s，10s 心跳）；外部调用需 <code>Bearer CRON_API_KEY</code></div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card orch" id="card-sync">
+        <div class="status"></div>
+        <div class="title">syncHelmData()</div>
+        <div class="desc"><code>lib/helm.ts</code> · fetch index → 下载 tgz → 提取 values → 收集 <code>image</code> 条目 → registry 验证 3 变体 → 写 Blob / 本地；完成后 <code>revalidatePath("/")</code> + 可选 homepage warmup</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 存储层 — storage factory fans out to blob + local -->
+  <div class="row">
+    <div class="row-label"><span class="num">③</span>存储</div>
+    <div class="cards">
+      <div class="card orch" id="card-storage-factory">
+        <div class="status"></div>
+        <div class="title">Storage Factory</div>
+        <div class="desc"><code>services/storage.ts</code> · 根据 <code>ENABLE_LOCAL_MODE</code> 选择 Blob 或 Local 实现（<code>read/readContent/write/ensureAccess</code>）</div>
+      </div>
+      <div class="arrow fan">⇉</div>
+      <div class="card core" id="card-blob">
+        <div class="status"></div>
+        <div class="title">Vercel Blob</div>
+        <div class="desc">前缀 <code>helm-watchdog/</code> ·
+          <code>cache.json</code> ·
+          <code>values/{v}.yaml</code> ·
+          <code>images/{v}.yaml</code> ·
+          <code>image-validation/{v}.json</code> ·
+          <code>workflow-logs.json</code>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="divider-label">旁路 · 开发模式</div>
+      <div class="card store" id="card-local">
+        <div class="status"></div>
+        <div class="title">本地缓存</div>
+        <div class="desc"><code>.cache/helm/</code> · 本地模式下最多处理 5 个最新版本加速开发</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 域逻辑库 — parallel independent libs (· soft) -->
+  <div class="row">
+    <div class="row-label"><span class="num">④</span>域逻辑</div>
+    <div class="cards">
+      <div class="card done" id="card-loadcache">
+        <div class="status"></div>
+        <div class="title">loadCache()</div>
+        <div class="desc"><code>lib/helm.ts</code> · 读 <code>cache.json</code> → 规范化时间戳 → 为每个版本并行拉取 inline 内容（values / images / validation）供 ISR 渲染</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-validation">
+        <div class="status"></div>
+        <div class="title">validation.ts</div>
+        <div class="desc">规范化 <code>ImageValidationPayload</code>，聚合 <code>ALL_FOUND / PARTIAL / MISSING / ERROR</code>；若 ORIGINAL 存在即视为可用</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-release-notes">
+        <div class="status"></div>
+        <div class="title">release-notes.ts</div>
+        <div class="desc">v ≥ 3.9.0 抓 <code>ee.dify.ai</code> HTML → 定位主容器 div → 重写相对链接 → <code>turndown</code> 转 MD；更老版本直接读 docs MD 并规范化链接</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-wizard">
+        <div class="status"></div>
+        <div class="title">values-wizard.ts</div>
+        <div class="desc">将旧版 overrides 合并进新版模板：保留用户 <code>repository</code>，强制使用新版 <code>tag</code>；输出变更报告（added/updated/unchanged/removed）</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-workflow-log-lib">
+        <div class="status"></div>
+        <div class="title">workflow-logs.ts</div>
+        <div class="desc">拉 Dify 运行日志；脱敏邮箱字段；刷新有 <code>RATE_LIMIT_MS = 5 min</code> 限流</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ API 暴露面 — parallel endpoints (· soft) -->
+  <div class="row">
+    <div class="row-label"><span class="num">⑤</span>API</div>
+    <div class="cards">
+      <div class="card done" id="card-rest-v1">
+        <div class="status"></div>
+        <div class="title">REST v1</div>
+        <div class="desc"><code>/versions</code>（可 <code>?includeValidation</code>）·
+          <code>/versions/latest</code> ·
+          <code>/versions/{v}</code> /<code>/images</code> /<code>/values</code> /<code>/validation</code> ·
+          <code>/cache</code> · 带 <code>s-maxage</code> 缓存头
+        </div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-releases-api">
+        <div class="status"></div>
+        <div class="title">/api/v1/releases/{v}</div>
+        <div class="desc">代理 ee.dify.ai 发布页并裁剪为纯净 HTML，<code>revalidate: 3600</code></div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-workflow-api">
+        <div class="status"></div>
+        <div class="title">/api/v1/workflow-logs</div>
+        <div class="desc">GET 读缓存 · POST 刷新（5 分钟限流，先记 <code>lastAttemptTime</code> 再请求上游）</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card orch" id="card-mcp">
+        <div class="status"></div>
+        <div class="title">MCP · /api/v1/mcp</div>
+        <div class="desc">JSON-RPC 2.0 分发器 · 6 tools：<code>list_versions / get_latest_version / get_version_details / list_images / validate_images / get_version_release_notes</code> · 2 prompts</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-sse">
+        <div class="status"></div>
+        <div class="title">/api/v1/sse</div>
+        <div class="desc">MCP 的 Server-Sent Events 传输；按 <code>sessionId</code> 路由消息</div>
+      </div>
+      <div class="divider"></div>
+      <div class="divider-label">文档</div>
+      <div class="card done" id="card-openapi">
+        <div class="status"></div>
+        <div class="title">OpenAPI</div>
+        <div class="desc"><code>next-swagger-doc</code> 从路由 JSDoc 生成 <code>/openapi.json</code></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥ 观测链路 — write path followed by aggregate query surfaces -->
+  <div class="row">
+    <div class="row-label"><span class="num">⑥</span>观测</div>
+    <div class="cards">
+      <div class="card orch" id="card-analytics-instrumentation">
+        <div class="status"></div>
+        <div class="title">Request Instrumentation</div>
+        <div class="desc"><code>middleware.ts</code> 记录首页与非排除的 <code>/api/v1/*</code> 调用；<code>mcp/handler.ts</code> 在 <code>tools/call</code> 成功或失败后记录工具名与耗时</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card done" id="card-analytics-client">
+        <div class="status"></div>
+        <div class="title">analytics/session + track</div>
+        <div class="desc"><code>SHA-256(IP+UA+salt)</code> 生成 session hash；<code>track.ts</code> 用 <code>ANALYTICS_WORKER_SECRET</code> 做 HMAC，写入超时 2s 且吞掉错误</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card orch" id="card-analytics-worker">
+        <div class="status"></div>
+        <div class="title">Cloudflare Worker</div>
+        <div class="desc"><code>/track</code> 写入事件，<code>/query</code> 查询聚合；校验 <code>X-Timestamp</code> + <code>X-Signature</code>，重放窗口 5 分钟</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card core" id="card-analytics-engine">
+        <div class="status"></div>
+        <div class="title">Analytics Engine</div>
+        <div class="desc">数据集 <code>dify_watchdog_events</code>；<code>blob1/blob2</code> 存 kind/name，<code>index1</code> 存 session hash，<code>double1</code> 存 latency</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="card done" id="card-analytics-api">
+        <div class="status"></div>
+        <div class="title">GET /api/v1/analytics</div>
+        <div class="desc">窗口 <code>7d / 30d / 90d</code>；返回 MCP / REST / page 的 total、UV 与 Top 20 名称分布；CDN 缓存 <code>s-maxage=300</code> / <code>stale=900</code></div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-dashboard">
+        <div class="status"></div>
+        <div class="title">/dashboard</div>
+        <div class="desc"><code>force-dynamic</code> 服务端页面；<code>WindowToggle</code> 切换 <code>7d/30d/90d</code>，三栏展示 MCP tool calls、REST API requests、Page views</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑦ 消费端 — parallel consumers (· soft) -->
+  <div class="row">
+    <div class="row-label"><span class="num">⑦</span>消费</div>
+    <div class="cards">
+      <div class="card done" id="card-ui">
+        <div class="status"></div>
+        <div class="title">VersionExplorer</div>
+        <div class="desc"><code>app/page.tsx</code> 服务端调 <code>loadCache</code>，ISR <code>revalidate = 86400</code>；含 values diff、values-wizard、workflow-logs、MCP 配置等弹窗</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-swagger">
+        <div class="status"></div>
+        <div class="title">Swagger UI</div>
+        <div class="desc"><code>/swagger</code> · 渲染 <code>/openapi.json</code></div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-mcp-clients">
+        <div class="status"></div>
+        <div class="title">MCP AI Clients</div>
+        <div class="desc">Claude Code / IDE 代理通过 Streamable HTTP 或 SSE 调用 6 个工具</div>
+      </div>
+      <div class="arrow soft">·</div>
+      <div class="card done" id="card-api-consumers">
+        <div class="status"></div>
+        <div class="title">REST 调用方</div>
+        <div class="desc">脚本 / 仪表盘 / CI · 直接消费 v1 REST JSON/YAML</div>
+      </div>
+      <div class="divider"></div>
+      <div class="divider-label">旁路 · 独立 shell 脚本（不走 Next.js）</div>
+      <div class="card store" id="card-shell">
+        <div class="status"></div>
+        <div class="title">shell 工具</div>
+        <div class="desc"><code>list-dify-versions.sh</code> · <code>get-dify-helm-images.sh</code> · <code>get-dify-values.sh</code> · 仅用于手动检查</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <div><b>部署：</b> Vercel · Node.js runtime · Next.js 15.5.7 (Turbopack) · React 19.1.0 · Cloudflare Worker / Analytics Engine</div>
+    <div><b>CI/CD：</b> Vercel auto deploy · daily cron <code>0 2 * * *</code> · Cloudflare Worker 通过 <code>wrangler deploy</code> 单独发布</div>
+    <div><b>环境变量：</b> <code>BLOB_READ_WRITE_TOKEN</code> + 可选 <code>CRON_API_KEY</code> / <code>DIFY_API_KEY</code> / <code>ANALYTICS_WORKER_URL</code> / <code>ANALYTICS_WORKER_SECRET</code> / <code>ANALYTICS_SESSION_SALT</code></div>
+    <div><b>测试：</b> Jest · API route、MCP、analytics、middleware、values wizard 等测试位于 <code>src/test/</code></div>
+    <div><b>术语：</b> <code>chart</code>（Helm 包）· <code>values.yaml</code>（部署配置）· <code>image variant</code>（ORIGINAL/AMD64/ARM64）· <code>Analytics Engine</code>（Cloudflare 事件聚合）· <code>EE</code>（Enterprise）</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Cross-layer semantic connections. Format: [fromId, toId, strong?]
+  // Only edges that represent a real data/control flow. Do NOT connect row-to-row.
+  const CONNECTIONS = [
+    // ① upstream → ② sync pipeline
+    ['card-helm-index', 'card-sync'],
+    ['card-helm-chart', 'card-sync'],
+    ['card-coding-reg', 'card-sync'],
+
+    // ① upstream → ④ domain libs (libs hit upstream directly, bypassing cron)
+    ['card-ee-release',      'card-release-notes'],
+    ['card-docs-site',       'card-release-notes'],
+    ['card-dify-api',        'card-workflow-log-lib'],
+
+    // ② sync → ③ storage (write path)
+    ['card-sync', 'card-storage-factory', true],
+
+    // ③ → ④ read path (loadCache reads from blob; local fallback)
+    ['card-blob',  'card-loadcache', true],
+    ['card-local', 'card-loadcache'],
+
+    // ④ → ⑤ domain libs feed API routes
+    ['card-loadcache',         'card-rest-v1'],
+    ['card-loadcache',         'card-mcp'],
+    ['card-validation',        'card-rest-v1'],
+    ['card-release-notes',     'card-releases-api'],
+    ['card-release-notes',     'card-mcp'],
+    ['card-workflow-log-lib',  'card-workflow-api'],
+
+    // ④ → ⑦ skip: SSR renders UI directly from loadCache; wizard runs client-side
+    ['card-loadcache', 'card-ui', true],
+    ['card-wizard',    'card-ui'],
+
+    // ⑤ → ⑥ observability
+    ['card-rest-v1', 'card-analytics-instrumentation'],
+    ['card-mcp',     'card-analytics-instrumentation'],
+    ['card-sse',     'card-analytics-instrumentation'],
+
+    // ⑤/⑥ → ⑦ consumers
+    ['card-rest-v1',      'card-api-consumers'],
+    ['card-rest-v1',      'card-ui'],
+    ['card-releases-api', 'card-ui'],
+    ['card-workflow-api', 'card-ui'],
+    ['card-mcp',          'card-mcp-clients'],
+    ['card-sse',          'card-mcp-clients'],
+    ['card-openapi',      'card-swagger'],
+    ['card-analytics-api', 'card-api-consumers'],
+  ];
+
+  function draw() {
+    const svg = document.querySelector('.connections');
+    const board = document.querySelector('.board');
+    if (!svg || !board) return;
+
+    [...svg.querySelectorAll('path.conn')].forEach(p => p.remove());
+
+    const bRect = board.getBoundingClientRect();
+    const width  = board.scrollWidth  || bRect.width;
+    const height = board.scrollHeight || bRect.height;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+
+    for (const [fromId, toId, strong] of CONNECTIONS) {
+      const a = document.getElementById(fromId);
+      const b = document.getElementById(toId);
+      if (!a || !b) continue;
+
+      const ar = a.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+      const x1 = ar.left + ar.width / 2 - bRect.left;
+      const y1 = ar.bottom              - bRect.top;
+      const x2 = br.left + br.width / 2 - bRect.left;
+      const y2 = br.top                 - bRect.top - 2;
+
+      const dy = Math.max(30, (y2 - y1) * 0.55);
+      const d = `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
+
+      const p = document.createElementNS(SVG_NS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('class', strong ? 'conn strong' : 'conn');
+      p.setAttribute('marker-end', strong ? 'url(#arr-strong)' : 'url(#arr)');
+      svg.appendChild(p);
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    requestAnimationFrame(draw);
+  } else {
+    window.addEventListener('DOMContentLoaded', () => requestAnimationFrame(draw));
+  }
+  window.addEventListener('load',   draw);
+  window.addEventListener('resize', draw);
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => draw()).observe(document.querySelector('.board'));
+  }
+})();
+</script>
+</body>
+</html>
