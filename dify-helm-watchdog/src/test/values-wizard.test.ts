@@ -15,7 +15,7 @@ const readFixture = (relativePath: string) => {
 };
 
 type ImageMap = Record<string, { repository?: string; tag?: string }>;
-type HelmImageConfig = { image?: { repository?: string; tag?: string } };
+type HelmImageConfig = { image?: { repository?: string; tag?: string }; logoConfig?: { image?: { repository?: string; tag?: string } } };
 type HelmValuesMap = Record<string, HelmImageConfig>;
 
 describe("values wizard", () => {
@@ -35,7 +35,7 @@ describe("values wizard", () => {
 
       expect(changes.length).toBeGreaterThan(0);
       expect(changes.some((c) => c.status === "missing")).toBe(false);
-      expect(parsed.api.image.tag).toBe(images.api?.tag);
+      expect(parsed.api.image!.tag).toBe(images.api?.tag);
       Object.keys(templateParsed).forEach((key) => {
         expect(parsed).toHaveProperty(key);
       });
@@ -128,18 +128,18 @@ describe("values wizard", () => {
 
       expect(changes.length).toBeGreaterThan(0);
       expect(changes.some((c) => c.status === "missing")).toBe(false);
-      expect(parsed.api.image.tag).toBe(expectedTags.api);
-      expect(parsed.web.image.tag).toBe(expectedTags.web);
-      expect(parsed.sandbox.image.tag).toBe(expectedTags.sandbox);
-      expect(parsed.enterprise.image.tag).toBe(expectedTags.enterprise);
-      expect(parsed.web.logoConfig.image.tag).toBe(expectedTags.logo);
-      expect(parsed.api.image.repository).toBe(
+      expect(parsed.api.image!.tag).toBe(expectedTags.api);
+      expect(parsed.web.image!.tag).toBe(expectedTags.web);
+      expect(parsed.sandbox.image!.tag).toBe(expectedTags.sandbox);
+      expect(parsed.enterprise.image!.tag).toBe(expectedTags.enterprise);
+      expect(parsed.web.logoConfig!.image!.tag).toBe(expectedTags.logo);
+      expect(parsed.api.image!.repository).toBe(
         "registry.internal.example.com/dify/dify-api",
       );
-      expect(parsed.web.image.repository).toBe(
+      expect(parsed.web.image!.repository).toBe(
         "registry.internal.example.com/dify/dify-web",
       );
-      expect(parsed.sandbox.image.repository).toBe(
+      expect(parsed.sandbox.image!.repository).toBe(
         "registry.internal.example.com/dify/dify-sandbox",
       );
       Object.keys(templateParsed).forEach((key) => {
