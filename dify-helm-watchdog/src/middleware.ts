@@ -4,7 +4,10 @@ import {
   type NextRequest,
 } from "next/server";
 
-import { computeSessionHashFromHeaders } from "@/lib/analytics/session";
+import {
+  computeSessionHashFromHeaders,
+  extractCountry,
+} from "@/lib/analytics/session";
 import { trackEvent, type TrackEventInput } from "@/lib/analytics/track";
 
 const EXCLUDED_API_PREFIXES = ["cron", "mcp", "sse", "analytics"];
@@ -13,10 +16,11 @@ const buildEvent = async (
   req: NextRequest,
 ): Promise<TrackEventInput | null> => {
   const path = req.nextUrl.pathname;
+  const country = extractCountry(req.headers);
 
   if (path === "/") {
     const sessionHash = await computeSessionHashFromHeaders(req.headers);
-    return { kind: "page", name: "home", sessionHash };
+    return { kind: "page", name: "home", sessionHash, country };
   }
 
   if (path.startsWith("/api/v1/")) {
@@ -25,7 +29,7 @@ const buildEvent = async (
     const head = sub.split("/")[0];
     if (EXCLUDED_API_PREFIXES.includes(head)) return null;
     const sessionHash = await computeSessionHashFromHeaders(req.headers);
-    return { kind: "api", name: sub.slice(0, 200), sessionHash };
+    return { kind: "api", name: sub.slice(0, 200), sessionHash, country };
   }
 
   return null;

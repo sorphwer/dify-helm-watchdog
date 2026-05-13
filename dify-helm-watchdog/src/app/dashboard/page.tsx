@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 
-import { queryAnalytics, type AnalyticsQueryResponse, type KindStats } from "@/lib/analytics/track";
+import {
+  queryAnalytics,
+  type AnalyticsQueryResponse,
+  type CountryStats,
+  type KindStats,
+} from "@/lib/analytics/track";
 
 import { WindowToggle } from "./window-toggle";
 
@@ -98,6 +103,90 @@ function Panel({ title, subtitle, stats, showBreakdown }: PanelProps) {
 
 const EMPTY_STATS: KindStats = { total: 0, uv: 0, byName: [] };
 
+const COUNTRY_NAMES: Record<string, string> = {
+  US: "United States",
+  CN: "China",
+  JP: "Japan",
+  KR: "South Korea",
+  DE: "Germany",
+  GB: "United Kingdom",
+  FR: "France",
+  IN: "India",
+  SG: "Singapore",
+  HK: "Hong Kong",
+  TW: "Taiwan",
+  CA: "Canada",
+  AU: "Australia",
+  NL: "Netherlands",
+  BR: "Brazil",
+  RU: "Russia",
+  XX: "Unknown",
+};
+
+const countryFlag = (code: string): string => {
+  if (code === "XX" || !/^[A-Z]{2}$/.test(code)) return "🌐";
+  const A = 0x41;
+  const REGIONAL_INDICATOR_A = 0x1f1e6;
+  return (
+    String.fromCodePoint(code.charCodeAt(0) - A + REGIONAL_INDICATOR_A) +
+    String.fromCodePoint(code.charCodeAt(1) - A + REGIONAL_INDICATOR_A)
+  );
+};
+
+function CountryPanel({ rows }: { rows: CountryStats[] }) {
+  const top = rows.slice(0, 10);
+  const max = top.reduce((m, r) => (r.hits > m ? r.hits : m), 0) || 1;
+
+  return (
+    <section className="flex flex-col gap-4 rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-5">
+      <header>
+        <p className="text-xs uppercase tracking-widest text-zinc-500">
+          geo distribution
+        </p>
+        <h2 className="mt-1 font-mono text-sm text-zinc-200">
+          Top countries (all traffic)
+        </h2>
+      </header>
+
+      {top.length === 0 ? (
+        <p className="font-mono text-xs text-zinc-600">
+          no traffic in this window
+        </p>
+      ) : (
+        <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {top.map((row) => {
+            const pct = Math.round((row.hits / max) * 100);
+            const label = COUNTRY_NAMES[row.country] ?? row.country;
+            return (
+              <li
+                key={row.country}
+                className="flex flex-col gap-0.5 font-mono text-xs"
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className="truncate text-zinc-300">
+                    <span className="mr-1.5">{countryFlag(row.country)}</span>
+                    {label}
+                    <span className="ml-2 text-zinc-600">[{row.country}]</span>
+                  </span>
+                  <span className="tabular-nums text-zinc-500">
+                    {formatNumber(row.hits)}
+                  </span>
+                </div>
+                <div className="h-[3px] w-full overflow-hidden rounded-sm bg-zinc-800/80">
+                  <div
+                    className="h-full bg-emerald-500/60"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const windowParam = parseWindow(params.window);
@@ -115,6 +204,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const mcp = data?.mcp ?? EMPTY_STATS;
   const api = data?.api ?? EMPTY_STATS;
   const page = data?.page ?? EMPTY_STATS;
+  const byCountry = data?.byCountry ?? [];
   const generatedAt = data?.generatedAt
     ? new Date(data.generatedAt).toLocaleString("en-US", {
         timeZone: "UTC",
@@ -167,10 +257,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         />
       </div>
 
+      <CountryPanel rows={byCountry} />
+
       <footer className="font-mono text-[11px] text-zinc-600">
         Aggregated counts only — no IPs, user agents, or request bodies are
-        stored. Unique visitor estimates use HyperLogLog over a hashed
-        IP+UA digest.
+        stored. Country is derived server-side from the Vercel geo header
+        (ISO-3166-1 alpha-2); &quot;XX&quot; means unknown / local dev.
       </footer>
     </main>
   );

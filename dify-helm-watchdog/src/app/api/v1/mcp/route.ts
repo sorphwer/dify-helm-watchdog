@@ -8,7 +8,10 @@
 
 import { handleJsonMessage, handleMessage } from "@/lib/mcp/handler";
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
-import { computeSessionHashFromRequest } from "@/lib/analytics/session";
+import {
+  computeSessionHashFromRequest,
+  extractCountry,
+} from "@/lib/analytics/session";
 import {
   MCP_PROTOCOL_VERSION,
   MCP_SERVER_NAME,
@@ -223,11 +226,12 @@ export async function POST(request: Request) {
     }
 
     const sessionHash = await computeSessionHashFromRequest(request);
+    const country = extractCountry(request.headers);
 
     // Handle batch requests
     if (Array.isArray(parsed)) {
       const responses = await Promise.all(
-        parsed.map((message) => handleMessage(message, sessionHash)),
+        parsed.map((message) => handleMessage(message, sessionHash, country)),
       );
 
       // Filter out null responses (notifications)
@@ -248,7 +252,7 @@ export async function POST(request: Request) {
     }
 
     // Handle single request
-    const response = await handleJsonMessage(body, sessionHash);
+    const response = await handleJsonMessage(body, sessionHash, country);
 
     if (response === null) {
       // Notification - no response needed

@@ -43,3 +43,15 @@ export const computeSessionHashFromHeaders = async (
 export const computeSessionHashFromRequest = (
   req: Request,
 ): Promise<string> => computeSessionHashFromHeaders(req.headers);
+
+// Vercel injects x-vercel-ip-country (ISO-3166-1 alpha-2) on every incoming
+// request. Fall back to CF's header when running behind Cloudflare, then "XX"
+// for local dev or anything we can't classify.
+export const extractCountry = (headers: Headers): string => {
+  const raw =
+    headers.get("x-vercel-ip-country") ||
+    headers.get("cf-ipcountry") ||
+    "";
+  const upper = raw.toUpperCase();
+  return /^[A-Z]{2}$/.test(upper) ? upper : "XX";
+};

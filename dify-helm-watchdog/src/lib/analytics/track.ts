@@ -4,6 +4,7 @@ export interface TrackEventInput {
   kind: EventKind;
   name: string;
   sessionHash: string;
+  country?: string;
   latencyMs?: number;
 }
 
@@ -50,10 +51,13 @@ export const trackEvent = async (input: TrackEventInput): Promise<void> => {
   const cfg = isConfigured();
   if (!cfg) return;
 
+  const country =
+    input.country && /^[A-Z]{2}$/.test(input.country) ? input.country : "XX";
   const body = JSON.stringify({
     kind: input.kind,
     name: input.name.slice(0, 256),
     sessionHash: input.sessionHash,
+    country,
     ...(typeof input.latencyMs === "number"
       ? { latencyMs: Math.max(0, Math.round(input.latencyMs)) }
       : {}),
@@ -88,12 +92,19 @@ export interface KindStats {
   byName: Array<{ name: string; hits: number }>;
 }
 
+export interface CountryStats {
+  country: string;
+  hits: number;
+  uv: number;
+}
+
 export interface AnalyticsQueryResponse {
   window: "7d" | "30d" | "90d";
   generatedAt: string;
   mcp: KindStats;
   api: KindStats;
   page: KindStats;
+  byCountry: CountryStats[];
 }
 
 export const queryAnalytics = async (

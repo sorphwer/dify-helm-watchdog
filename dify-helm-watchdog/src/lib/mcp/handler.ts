@@ -103,6 +103,7 @@ const handleToolsCall = async (
   id: string | number | undefined,
   params: McpToolCallParams,
   sessionHash?: string,
+  country?: string,
 ): Promise<JsonRpcResponse> => {
   if (!params?.name) {
     return createErrorResponse(
@@ -131,6 +132,7 @@ const handleToolsCall = async (
           kind: "mcp",
           name: params.name,
           sessionHash,
+          country,
           latencyMs: Date.now() - start,
         }).catch(() => {});
       });
@@ -143,6 +145,7 @@ const handleToolsCall = async (
           kind: "mcp",
           name: params.name,
           sessionHash,
+          country,
           latencyMs: Date.now() - start,
         }).catch(() => {});
       });
@@ -190,6 +193,7 @@ const handlePromptsGet = (
 export const handleMessage = async (
   message: unknown,
   sessionHash?: string,
+  country?: string,
 ): Promise<JsonRpcResponse | null> => {
   // Validate request format
   if (!isValidRequest(message)) {
@@ -234,6 +238,7 @@ export const handleMessage = async (
         id,
         (params ?? {}) as unknown as McpToolCallParams,
         sessionHash,
+        country,
       );
 
     case "prompts/list":
@@ -255,10 +260,11 @@ export const handleMessage = async (
 export const handleJsonMessage = async (
   jsonString: string,
   sessionHash?: string,
+  country?: string,
 ): Promise<JsonRpcResponse | null> => {
   try {
     const message = JSON.parse(jsonString) as unknown;
-    return handleMessage(message, sessionHash);
+    return handleMessage(message, sessionHash, country);
   } catch {
     return createErrorResponse(
       undefined,

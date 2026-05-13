@@ -16,6 +16,7 @@ const buildReq = (path: string, headers: Record<string, string> = {}) => {
     headers: {
       "x-forwarded-for": "1.2.3.4",
       "user-agent": "test-agent",
+      "x-vercel-ip-country": "US",
       ...headers,
     },
   });
@@ -50,6 +51,7 @@ describe("middleware", () => {
     expect(mockedTrack.mock.calls[0][0]).toMatchObject({
       kind: "page",
       name: "home",
+      country: "US",
     });
     expect(mockedTrack.mock.calls[0][0].sessionHash).toMatch(/^[a-f0-9]{64}$/);
   });
@@ -63,7 +65,20 @@ describe("middleware", () => {
     expect(mockedTrack.mock.calls[0][0]).toMatchObject({
       kind: "api",
       name: "versions/3.9.0/values",
+      country: "US",
     });
+  });
+
+  it("falls back to country=XX when no geo header is present", async () => {
+    const evt = buildEvent();
+    // Override the default test header with empty string to clear it.
+    await middleware(
+      buildReq("/", { "x-vercel-ip-country": "" }),
+      evt.fetchEvent,
+    );
+    await flushMicrotasks();
+    expect(mockedTrack).toHaveBeenCalledTimes(1);
+    expect(mockedTrack.mock.calls[0][0]).toMatchObject({ country: "XX" });
   });
 
   it.each(["cron", "mcp", "sse", "analytics"])(

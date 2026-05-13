@@ -60,8 +60,35 @@ describe("trackEvent", () => {
       kind: "mcp",
       name: "list_versions",
       sessionHash: "abc",
+      country: "XX",
       latencyMs: 12,
     });
+  });
+
+  it("forwards a valid country code through to the worker", async () => {
+    process.env.ANALYTICS_WORKER_URL = "https://analytics.example.com";
+    process.env.ANALYTICS_WORKER_SECRET = "secret";
+    await trackEvent({
+      kind: "api",
+      name: "versions",
+      sessionHash: "h",
+      country: "US",
+    });
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).country).toBe("US");
+  });
+
+  it("falls back to country=XX when input country is malformed", async () => {
+    process.env.ANALYTICS_WORKER_URL = "https://analytics.example.com";
+    process.env.ANALYTICS_WORKER_SECRET = "secret";
+    await trackEvent({
+      kind: "api",
+      name: "versions",
+      sessionHash: "h",
+      country: "us",
+    });
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).country).toBe("XX");
   });
 
   it("strips trailing slashes from the worker URL", async () => {

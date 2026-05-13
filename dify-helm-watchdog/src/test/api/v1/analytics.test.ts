@@ -18,6 +18,11 @@ describe("GET /api/v1/analytics", () => {
     mcp: { total: 10, uv: 4, byName: [{ name: "list_versions", hits: 10 }] },
     api: { total: 20, uv: 6, byName: [{ name: "versions", hits: 20 }] },
     page: { total: 33, uv: 12, byName: [] },
+    byCountry: [
+      { country: "US", hits: 40, uv: 15 },
+      { country: "CN", hits: 18, uv: 5 },
+      { country: "XX", hits: 5, uv: 2 },
+    ],
   };
 
   it("defaults to 7d window when no param is provided", async () => {

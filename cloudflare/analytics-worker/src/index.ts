@@ -12,6 +12,7 @@ interface TrackPayload {
   kind: EventKind;
   name: string;
   sessionHash: string;
+  country?: string;
   latencyMs?: number;
 }
 
@@ -25,12 +26,19 @@ interface KindStats {
   byName: Array<{ name: string; hits: number }>;
 }
 
+interface CountryStats {
+  country: string;
+  hits: number;
+  uv: number;
+}
+
 interface QueryResult {
   window: Window;
   generatedAt: string;
   mcp: KindStats;
   api: KindStats;
   page: KindStats;
+  byCountry: CountryStats[];
 }
 
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
@@ -102,6 +110,9 @@ const authenticate = async (
 const isTrackPayload = (x: unknown): x is TrackPayload => {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
+  const countryOk =
+    o.country === undefined ||
+    (typeof o.country === "string" && /^[A-Z]{2}$/.test(o.country));
   return (
     (o.kind === "mcp" || o.kind === "api" || o.kind === "page") &&
     typeof o.name === "string" &&
@@ -110,6 +121,7 @@ const isTrackPayload = (x: unknown): x is TrackPayload => {
     typeof o.sessionHash === "string" &&
     o.sessionHash.length > 0 &&
     o.sessionHash.length <= 128 &&
+    countryOk &&
     (o.latencyMs === undefined || typeof o.latencyMs === "number")
   );
 };
@@ -129,7 +141,7 @@ const handleTrack = async (
   }
 
   env.EVENTS.writeDataPoint({
-    blobs: [payload.kind, payload.name],
+    blobs: [payload.kind, payload.name, payload.country ?? "XX"],
     indexes: [payload.sessionHash],
     doubles: [payload.latencyMs ?? 0],
   });
@@ -144,6 +156,7 @@ interface AnalyticsRow {
   name?: string;
   hits?: number;
   uv?: number;
+  country?: string;
 }
 
 interface AnalyticsResponse {
@@ -220,6 +233,33 @@ const queryKind = async (
   };
 };
 
+const queryCountries = async (
+  env: Env,
+  days: number,
+): Promise<CountryStats[]> => {
+  // Old rows written before blob3 was introduced will have blob3 = ''.
+  // We surface those as 'XX' (unknown) instead of dropping them so the
+  // dashboard stays honest about coverage during the rollout window.
+  const sql = `
+    SELECT
+      CASE WHEN blob3 = '' THEN 'XX' ELSE blob3 END AS country,
+      sum(_sample_interval) AS hits,
+      count(DISTINCT index1) AS uv
+    FROM ${DATASET}
+    WHERE timestamp > NOW() - INTERVAL '${days}' DAY
+    GROUP BY country
+    ORDER BY hits DESC
+    LIMIT 20
+    FORMAT JSON
+  `;
+  const rows = await runSql(env, sql);
+  return rows.map((row) => ({
+    country: String(row.country ?? "XX"),
+    hits: Number(row.hits ?? 0),
+    uv: Number(row.uv ?? 0),
+  }));
+};
+
 const handleQuery = async (
   payload: unknown,
   env: Env,
@@ -230,10 +270,11 @@ const handleQuery = async (
   const days = WINDOW_DAYS[payload.window];
 
   try {
-    const [mcp, api, page] = await Promise.all([
+    const [mcp, api, page, byCountry] = await Promise.all([
       queryKind(env, "mcp", days),
       queryKind(env, "api", days),
       queryKind(env, "page", days),
+      queryCountries(env, days),
     ]);
     const result: QueryResult = {
       window: payload.window,
@@ -241,6 +282,7 @@ const handleQuery = async (
       mcp,
       api,
       page,
+      byCountry,
     };
     return new Response(JSON.stringify(result), {
       status: 200,

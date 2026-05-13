@@ -1,4 +1,7 @@
-import { computeSessionHashFromHeaders } from "@/lib/analytics/session";
+import {
+  computeSessionHashFromHeaders,
+  extractCountry,
+} from "@/lib/analytics/session";
 
 describe("computeSessionHashFromHeaders", () => {
   const originalEnv = process.env;
@@ -61,5 +64,36 @@ describe("computeSessionHashFromHeaders", () => {
       new Headers({ "x-forwarded-for": "5.5.5.5", "user-agent": "x" }),
     );
     expect(a).toBe(single);
+  });
+});
+
+describe("extractCountry", () => {
+  it("returns the ISO-2 code from x-vercel-ip-country", () => {
+    expect(extractCountry(new Headers({ "x-vercel-ip-country": "US" }))).toBe(
+      "US",
+    );
+  });
+
+  it("falls back to cf-ipcountry when the vercel header is missing", () => {
+    expect(extractCountry(new Headers({ "cf-ipcountry": "JP" }))).toBe("JP");
+  });
+
+  it("uppercases lowercase codes", () => {
+    expect(extractCountry(new Headers({ "x-vercel-ip-country": "fr" }))).toBe(
+      "FR",
+    );
+  });
+
+  it("returns XX when no country header is present", () => {
+    expect(extractCountry(new Headers())).toBe("XX");
+  });
+
+  it("returns XX for malformed codes", () => {
+    expect(extractCountry(new Headers({ "x-vercel-ip-country": "USA" }))).toBe(
+      "XX",
+    );
+    expect(extractCountry(new Headers({ "x-vercel-ip-country": "1A" }))).toBe(
+      "XX",
+    );
   });
 });
