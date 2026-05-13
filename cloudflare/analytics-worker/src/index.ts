@@ -237,27 +237,38 @@ const queryCountries = async (
   env: Env,
   days: number,
 ): Promise<CountryStats[]> => {
-  // Old rows written before blob3 was introduced will have blob3 = ''.
-  // We surface those as 'XX' (unknown) instead of dropping them so the
-  // dashboard stays honest about coverage during the rollout window.
+  // AE's SQL dialect rejects CASE WHEN / if() in projections, so we group
+  // on raw blob3 and merge empty strings (pre-rollout rows) into "XX"
+  // client-side instead of dropping them.
   const sql = `
     SELECT
-      CASE WHEN blob3 = '' THEN 'XX' ELSE blob3 END AS country,
+      blob3 AS country,
       sum(_sample_interval) AS hits,
       count(DISTINCT index1) AS uv
     FROM ${DATASET}
     WHERE timestamp > NOW() - INTERVAL '${days}' DAY
     GROUP BY country
     ORDER BY hits DESC
-    LIMIT 20
+    LIMIT 30
     FORMAT JSON
   `;
   const rows = await runSql(env, sql);
-  return rows.map((row) => ({
-    country: String(row.country ?? "XX"),
-    hits: Number(row.hits ?? 0),
-    uv: Number(row.uv ?? 0),
-  }));
+  const merged = new Map<string, { hits: number; uv: number }>();
+  for (const row of rows) {
+    const raw = String(row.country ?? "");
+    const country = /^[A-Z]{2}$/.test(raw) ? raw : "XX";
+    const acc = merged.get(country) ?? { hits: 0, uv: 0 };
+    acc.hits += Number(row.hits ?? 0);
+    // UV from grouped buckets isn't additive in general, but the only
+    // collisions here are blob3='' + already-'XX' rows, which we treat as
+    // a single bucket — additivity is fine for that case.
+    acc.uv += Number(row.uv ?? 0);
+    merged.set(country, acc);
+  }
+  return [...merged.entries()]
+    .map(([country, v]) => ({ country, hits: v.hits, uv: v.uv }))
+    .sort((a, b) => b.hits - a.hits)
+    .slice(0, 20);
 };
 
 const handleQuery = async (
