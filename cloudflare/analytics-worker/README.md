@@ -7,6 +7,22 @@ Wire-up: Vercel middleware / MCP handler → `POST /track` → Analytics Engine.
 Dashboard read: Vercel route → `POST /query` → SQL API → Analytics Engine.
 Browser never talks to this Worker directly.
 
+## Analytics Engine row schema (`dify_watchdog_events`)
+
+| Column | Source | Example |
+|---|---|---|
+| `blob1` | event kind | `mcp` / `api` / `page` |
+| `blob2` | event name | `list_images` / `versions/3.9.0/values` / `home` |
+| `blob3` | ISO-3166-1 alpha-2 country, server-extracted from `x-vercel-ip-country` | `US` / `CN` / `XX` (unknown) |
+| `index1` | session hash, `sha256(ip + ua + salt)` — used for UV via `count(DISTINCT index1)` | 64-char hex |
+| `double1` | latency ms (MCP only; 0 for api/page) | `12` |
+| `timestamp` | AE auto | — |
+| `_sample_interval` | AE auto sampling weight; `sum(_sample_interval)` is the real hit count | — |
+
+No raw IP, user-agent, referrer, URL params, or body is ever stored. Country
+is set by Vercel's edge based on the caller IP and cannot be forged by the
+client (it never appears in the JSON-RPC / HTTP body).
+
 ## What exists in Cloudflare (as of first deploy)
 
 | Resource | Identifier | Where to find it |
