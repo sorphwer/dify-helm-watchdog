@@ -21,7 +21,7 @@ dataset = "dify_watchdog_events"
 # Custom domain. Replace YOUR-DOMAIN.com with the apex zone you own in Cloudflare.
 # Workers will create the DNS record automatically once the zone is in your account.
 [[routes]]
-pattern = "analytics.YOUR-DOMAIN.com"
+pattern = "dify-watchdog-analytics.langgenius.app"
 custom_domain = true
 
 [observability]
