@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, type NextFetchEvent } from "next/server";
 
 import { middleware } from "@/middleware";
 import { trackEvent } from "@/lib/analytics/track";
@@ -21,18 +21,31 @@ const buildReq = (path: string, headers: Record<string, string> = {}) => {
   });
 };
 
+const buildEvent = () => {
+  const waitUntil = jest.fn();
+  return {
+    fetchEvent: { waitUntil } as unknown as NextFetchEvent,
+    waitUntil,
+  };
+};
+
 describe("middleware", () => {
   beforeEach(() => {
     process.env.ANALYTICS_SESSION_SALT = "test";
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    // clearAllMocks preserves the mock implementation between tests;
+    // resetAllMocks would strip Promise.resolve() and trackEvent(...).catch()
+    // would then throw on undefined.
+    jest.clearAllMocks();
   });
 
-  it("tracks homepage as kind=page name=home", async () => {
-    await middleware(buildReq("/"));
+  it("tracks homepage via waitUntil as kind=page name=home", async () => {
+    const evt = buildEvent();
+    await middleware(buildReq("/"), evt.fetchEvent);
     await flushMicrotasks();
+    expect(evt.waitUntil).toHaveBeenCalledTimes(1);
     expect(mockedTrack).toHaveBeenCalledTimes(1);
     expect(mockedTrack.mock.calls[0][0]).toMatchObject({
       kind: "page",
@@ -42,8 +55,10 @@ describe("middleware", () => {
   });
 
   it("tracks v1 API endpoint as kind=api with the path tail", async () => {
-    await middleware(buildReq("/api/v1/versions/3.9.0/values"));
+    const evt = buildEvent();
+    await middleware(buildReq("/api/v1/versions/3.9.0/values"), evt.fetchEvent);
     await flushMicrotasks();
+    expect(evt.waitUntil).toHaveBeenCalledTimes(1);
     expect(mockedTrack).toHaveBeenCalledTimes(1);
     expect(mockedTrack.mock.calls[0][0]).toMatchObject({
       kind: "api",
@@ -54,22 +69,27 @@ describe("middleware", () => {
   it.each(["cron", "mcp", "sse", "analytics"])(
     "skips /api/v1/%s (already instrumented or non-user)",
     async (prefix) => {
-      await middleware(buildReq(`/api/v1/${prefix}`));
-      await middleware(buildReq(`/api/v1/${prefix}/foo`));
+      const evt = buildEvent();
+      await middleware(buildReq(`/api/v1/${prefix}`), evt.fetchEvent);
+      await middleware(buildReq(`/api/v1/${prefix}/foo`), evt.fetchEvent);
       await flushMicrotasks();
+      expect(evt.waitUntil).not.toHaveBeenCalled();
       expect(mockedTrack).not.toHaveBeenCalled();
     },
   );
 
   it("does not track unrelated paths", async () => {
-    await middleware(buildReq("/dashboard"));
-    await middleware(buildReq("/swagger"));
+    const evt = buildEvent();
+    await middleware(buildReq("/dashboard"), evt.fetchEvent);
+    await middleware(buildReq("/swagger"), evt.fetchEvent);
     await flushMicrotasks();
+    expect(evt.waitUntil).not.toHaveBeenCalled();
     expect(mockedTrack).not.toHaveBeenCalled();
   });
 
   it("never throws even if trackEvent rejects", async () => {
     mockedTrack.mockRejectedValueOnce(new Error("boom"));
-    await expect(middleware(buildReq("/"))).resolves.toBeDefined();
+    const evt = buildEvent();
+    await expect(middleware(buildReq("/"), evt.fetchEvent)).resolves.toBeDefined();
   });
 });

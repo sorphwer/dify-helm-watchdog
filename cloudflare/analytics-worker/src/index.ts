@@ -197,7 +197,7 @@ const queryKind = async (
   const totalSql = `
     SELECT
       sum(_sample_interval) AS hits,
-      uniq(index1) AS uv
+      count(DISTINCT index1) AS uv
     FROM ${DATASET}
     WHERE blob1 = '${safeKind}'
       AND timestamp > NOW() - INTERVAL '${days}' DAY

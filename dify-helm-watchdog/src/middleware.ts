@@ -1,4 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
+import {
+  NextResponse,
+  type NextFetchEvent,
+  type NextRequest,
+} from "next/server";
 
 import { computeSessionHashFromHeaders } from "@/lib/analytics/session";
 import { trackEvent, type TrackEventInput } from "@/lib/analytics/track";
@@ -27,15 +31,17 @@ const buildEvent = async (
   return null;
 };
 
-export async function middleware(req: NextRequest): Promise<NextResponse> {
+export async function middleware(
+  req: NextRequest,
+  fetchEvent: NextFetchEvent,
+): Promise<NextResponse> {
   try {
     const event = await buildEvent(req);
     if (event) {
-      // Fire-and-forget. Analytics never blocks the actual response.
-      // trackEvent swallows its own errors but we add a defensive catch in
-      // case a future change ever lets one escape — middleware must not
-      // produce unhandled rejections.
-      trackEvent(event).catch(() => {});
+      // waitUntil keeps the Function alive until the track fetch resolves.
+      // Without it Vercel kills the in-flight request the moment we return
+      // NextResponse.next(), and the event never reaches the Worker.
+      fetchEvent.waitUntil(trackEvent(event).catch(() => {}));
     }
   } catch {
     // never block on analytics

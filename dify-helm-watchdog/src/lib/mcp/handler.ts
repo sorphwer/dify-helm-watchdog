@@ -3,6 +3,8 @@
  * Processes JSON-RPC 2.0 messages according to MCP protocol
  */
 
+import { after } from "next/server";
+
 import { TOOLS, executeTool } from "./tools";
 import { listPrompts, getPrompt } from "./prompts";
 import { trackEvent } from "@/lib/analytics/track";
@@ -123,21 +125,26 @@ const handleToolsCall = async (
   try {
     const result = await executeTool(params.name, params.arguments ?? {});
     if (sessionHash) {
-      void trackEvent({
-        kind: "mcp",
-        name: params.name,
-        sessionHash,
-        latencyMs: Date.now() - start,
+      // after() defers the fetch past the response so Vercel doesn't kill it.
+      after(() => {
+        trackEvent({
+          kind: "mcp",
+          name: params.name,
+          sessionHash,
+          latencyMs: Date.now() - start,
+        }).catch(() => {});
       });
     }
     return createResponse(id, result);
   } catch (error) {
     if (sessionHash) {
-      void trackEvent({
-        kind: "mcp",
-        name: params.name,
-        sessionHash,
-        latencyMs: Date.now() - start,
+      after(() => {
+        trackEvent({
+          kind: "mcp",
+          name: params.name,
+          sessionHash,
+          latencyMs: Date.now() - start,
+        }).catch(() => {});
       });
     }
     return createErrorResponse(

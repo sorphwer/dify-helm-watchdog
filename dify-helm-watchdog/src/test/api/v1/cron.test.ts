@@ -5,8 +5,10 @@ import { revalidatePath } from "next/cache";
 jest.mock("@/lib/helm", () => ({
   syncHelmData: jest.fn(),
   MissingBlobTokenError: class MissingBlobTokenError extends Error {
-    constructor(message: string) {
-      super(message);
+    constructor() {
+      super(
+        "BLOB_READ_WRITE_TOKEN is not configured. Please create a Vercel Blob store and expose the token before triggering the cron job.",
+      );
       this.name = "MissingBlobTokenError";
     }
   },
@@ -275,7 +277,7 @@ describe("POST /api/v1/cron", () => {
     expect(response.status).toBe(200);
 
     const text = await streamToText(response);
-    expect(text).toContain("[error] Blob storage token is not configured");
+    expect(text).toContain("[error] BLOB_READ_WRITE_TOKEN is not configured");
     expect(text).toContain("[status] failed");
   });
 
