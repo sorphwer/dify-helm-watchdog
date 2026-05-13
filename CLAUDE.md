@@ -37,9 +37,14 @@ Required environment variables (copy from `.env.example`):
 ```bash
 BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..." # Vercel Blob storage token
 CRON_API_KEY="..."                         # Optional: protects /api/v1/cron endpoint
+
+# Analytics (optional — without these, tracking + /dashboard are no-ops)
+ANALYTICS_WORKER_URL="https://dify-watchdog-analytics.langgenius.app"
+ANALYTICS_WORKER_SECRET="..."              # HMAC secret, must match the Cloudflare Worker
+ANALYTICS_SESSION_SALT="..."               # salts sha256(ip + ua + salt) for the session hash
 ```
 
-Create `.env.local` for local development. The cron endpoint requires the blob token even in development.
+Create `.env.local` for local development. The cron endpoint requires the blob token even in development. The three analytics vars can be omitted locally; with them unset, `trackEvent()` is a no-op and `/dashboard` shows empty stats — the rest of the app is unaffected.
 
 ## Architecture
 
@@ -87,6 +92,7 @@ All routes follow the Next.js App Router pattern with `route.ts` files.
 - `/api/v1/versions/{version}/validation` - Image validation report
 - `/api/v1/cache` - Full cache inspection (legacy)
 - `/api/v1/cron` - Trigger sync job (protected by bearer auth if `CRON_API_KEY` is set)
+- `/api/v1/analytics` - Aggregated usage stats (window: `7d` / `30d` / `90d`); proxies the Cloudflare Worker
 
 **MCP Endpoints:**
 - `/api/v1/mcp` - MCP server info (GET) and JSON-RPC handler (POST)
@@ -143,6 +149,7 @@ Different endpoints use different cache durations:
 | `/api/v1/versions` | `s-maxage=3600, stale-while-revalidate=86400` | Version list changes infrequently |
 | `/api/v1/versions/latest` | `s-maxage=1800, stale-while-revalidate=3600` | Latest version changes more often |
 | `/api/v1/versions/{version}/*` | `s-maxage=3600, stale-while-revalidate=86400` | Version-specific data is immutable |
+| `/api/v1/analytics` | `s-maxage=300, stale-while-revalidate=900` | Live usage stats; 5-min freshness is enough for a public dashboard |
 | `/api/v1/cron` | `no-store` | Dynamic operation, never cache |
 
 ## Working with the Cron Job
@@ -219,6 +226,39 @@ The application exposes an MCP server allowing AI models to interact programmati
 **Transports**:
 - Streamable HTTP: `POST /api/v1/mcp`
 - SSE: `GET /api/v1/sse` + `POST /api/v1/sse?sessionId=...`
+
+## Analytics & Dashboard
+
+The public usage dashboard at `/dashboard` is backed by a Cloudflare Worker
+that writes events to a Cloudflare Analytics Engine dataset. The browser
+never talks to the Worker directly — the Vercel app proxies both write and
+read paths so the Worker secret stays server-side.
+
+### Wire-up
+
+```
+Vercel middleware / MCP handler
+  ├─ extract session hash sha256(ip + ua + salt)
+  ├─ extract country from x-vercel-ip-country (Vercel-injected geo header)
+  └─ trackEvent() ──signed POST /track──► Worker ──writeDataPoint──► AE
+                                                                       ▲
+/dashboard ──fetch /api/v1/analytics──► queryAnalytics() ──signed POST /query──► Worker ──SQL API──┘
+```
+
+### Modules
+
+- **`src/middleware.ts`** — instruments `/` (kind=page) and non-excluded `/api/v1/*` (kind=api). Skips `cron`, `mcp`, `sse`, `analytics`. Uses `NextFetchEvent.waitUntil()` to keep the Function alive long enough for the track fetch to complete (without it, Vercel kills the in-flight request when `NextResponse.next()` returns).
+- **`src/lib/mcp/handler.ts`** — instruments `tools/call` (kind=mcp) with latency. Uses `after()` from `next/server` for the same reason.
+- **`src/lib/analytics/session.ts`** — `computeSessionHashFromHeaders`, `extractCountry`. Country is ISO-3166-1 alpha-2 from `x-vercel-ip-country` (fallback `cf-ipcountry`, default `"XX"`).
+- **`src/lib/analytics/track.ts`** — HMAC-signed fire-and-forget POST to `/track`; also exports `queryAnalytics()` for the dashboard route.
+- **`cloudflare/analytics-worker/`** — the Worker (`wrangler deploy` from that folder). See its README for the full CF resource inventory and AE row schema (`blob1=kind`, `blob2=name`, `blob3=country`, `index1=sessionHash`, `double1=latencyMs`).
+
+### Privacy
+
+Only the hashed session ID and a derived country code are stored — never raw
+IP, user-agent, referrer, URL params, or request body. Country comes from
+Vercel's edge based on the caller IP; MCP clients cannot influence it
+because it never appears in the JSON-RPC schema.
 
 ## Vercel Deployment
 

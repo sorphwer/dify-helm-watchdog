@@ -226,6 +226,62 @@ Caching:
 
 ---
 
+### 7a) Aggregate analytics (dashboard)
+
+```http
+GET /api/v1/analytics?window=7d
+```
+
+Backs the public `/dashboard`. Proxies the Cloudflare Analytics Engine via a
+signed call to our Worker. The browser never talks to the Worker directly.
+
+Query parameters:
+
+| Name | Type | Notes |
+|------|------|-------|
+| `window` | string | One of `7d`, `30d`, `90d`. Defaults to `7d`. Any other value falls back to `7d`. |
+
+Response shape:
+
+```json
+{
+  "window": "7d",
+  "generatedAt": "2026-05-13T09:30:45.838Z",
+  "mcp":  { "total": 3,  "uv": 2, "byName": [{ "name": "list_versions", "hits": 1 }] },
+  "api":  { "total": 18, "uv": 2, "byName": [{ "name": "versions", "hits": 17 }] },
+  "page": { "total": 16, "uv": 5, "byName": [{ "name": "home", "hits": 16 }] },
+  "byCountry": [
+    { "country": "US", "hits": 14, "uv": 1 },
+    { "country": "CN", "hits": 1,  "uv": 1 },
+    { "country": "XX", "hits": 22, "uv": 5 }
+  ]
+}
+```
+
+Notes:
+
+- `total` is `sum(_sample_interval)` from Cloudflare Analytics Engine — the
+  real-event count, not the row count.
+- `uv` (unique visitors) is `count(DISTINCT sessionHash)` over the window;
+  `sessionHash` is `sha256(ip + ua + salt)` derived server-side, so the
+  underlying IP/UA are never stored.
+- `byCountry` is a global top-N across all kinds. `country` is ISO-3166-1
+  alpha-2 from Vercel's `x-vercel-ip-country` header (set by the edge,
+  not user-controllable). Rows that were ingested before country tracking
+  was deployed surface as `"XX"` (unknown) instead of being dropped.
+- `Cache-Control`: `public, s-maxage=300, stale-while-revalidate=900` — the
+  dashboard is fine with up-to-5-minute staleness.
+- Returns **502** with `error.status: "UNAVAILABLE"` if the Worker query
+  fails (most often: AE SQL dialect surprises, transient network).
+
+Example:
+
+```bash
+curl 'https://dify-helm-watchdog.vercel.app/api/v1/analytics?window=30d'
+```
+
+---
+
 ### 7) Inspect cache payload
 
 ```http

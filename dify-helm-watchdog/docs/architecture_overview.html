@@ -394,7 +394,7 @@
       <div class="card orch" id="card-analytics-instrumentation">
         <div class="status"></div>
         <div class="title">Request Instrumentation</div>
-        <div class="desc"><code>middleware.ts</code> 记录首页与非排除的 <code>/api/v1/*</code> 调用；<code>mcp/handler.ts</code> 在 <code>tools/call</code> 成功或失败后记录工具名与耗时</div>
+        <div class="desc"><code>middleware.ts</code> 记录首页与非排除的 <code>/api/v1/*</code> 调用；<code>mcp/handler.ts</code> 在 <code>tools/call</code> 成功或失败后记录工具名与耗时；两者都从 <code>x-vercel-ip-country</code> 头取 ISO-2 国家码一起送出</div>
       </div>
       <div class="arrow">→</div>
       <div class="card done" id="card-analytics-client">
@@ -412,19 +412,19 @@
       <div class="card core" id="card-analytics-engine">
         <div class="status"></div>
         <div class="title">Analytics Engine</div>
-        <div class="desc">数据集 <code>dify_watchdog_events</code>；<code>blob1/blob2</code> 存 kind/name，<code>index1</code> 存 session hash，<code>double1</code> 存 latency</div>
+        <div class="desc">数据集 <code>dify_watchdog_events</code>；<code>blob1</code> kind、<code>blob2</code> name、<code>blob3</code> country (ISO-2 / <code>XX</code>)、<code>index1</code> session hash、<code>double1</code> latency；无原始 IP / UA / body</div>
       </div>
       <div class="arrow">→</div>
       <div class="card done" id="card-analytics-api">
         <div class="status"></div>
         <div class="title">GET /api/v1/analytics</div>
-        <div class="desc">窗口 <code>7d / 30d / 90d</code>；返回 MCP / REST / page 的 total、UV 与 Top 20 名称分布；CDN 缓存 <code>s-maxage=300</code> / <code>stale=900</code></div>
+        <div class="desc">窗口 <code>7d / 30d / 90d</code>；返回 MCP / REST / page 的 total、UV、Top 20 名称分布，以及全局 Top 20 <code>byCountry</code>；CDN 缓存 <code>s-maxage=300</code> / <code>stale=900</code></div>
       </div>
       <div class="arrow soft">·</div>
       <div class="card done" id="card-dashboard">
         <div class="status"></div>
         <div class="title">/dashboard</div>
-        <div class="desc"><code>force-dynamic</code> 服务端页面；<code>WindowToggle</code> 切换 <code>7d/30d/90d</code>，三栏展示 MCP tool calls、REST API requests、Page views</div>
+        <div class="desc"><code>force-dynamic</code> 服务端页面；<code>WindowToggle</code> 切换 <code>7d/30d/90d</code>，三栏展示 MCP tool calls / REST API requests / Page views，底部叠加一个全局 Top countries 面板（emoji 国旗 + ISO-2 + 全名）</div>
       </div>
     </div>
   </div>
