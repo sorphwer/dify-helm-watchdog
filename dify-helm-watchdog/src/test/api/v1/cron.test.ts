@@ -1,15 +1,15 @@
 import { POST } from "@/app/api/v1/cron/route";
-import { syncHelmData, MissingBlobTokenError } from "@/lib/helm";
+import { syncHelmData, MissingStorageCredentialsError } from "@/lib/helm";
 import { revalidatePath } from "next/cache";
 
 jest.mock("@/lib/helm", () => ({
   syncHelmData: jest.fn(),
-  MissingBlobTokenError: class MissingBlobTokenError extends Error {
+  MissingStorageCredentialsError: class MissingStorageCredentialsError extends Error {
     constructor() {
       super(
-        "BLOB_READ_WRITE_TOKEN is not configured. Please create a Vercel Blob store and expose the token before triggering the cron job.",
+        "Storage credentials are not configured. Please set the R2_* environment variables before triggering the cron job.",
       );
-      this.name = "MissingBlobTokenError";
+      this.name = "MissingStorageCredentialsError";
     }
   },
 }));
@@ -260,9 +260,9 @@ describe("POST /api/v1/cron", () => {
     expect(text).toContain("[result] no new versions detected");
   });
 
-  it("should handle MissingBlobTokenError gracefully", async () => {
+  it("should handle MissingStorageCredentialsError gracefully", async () => {
     mockedSyncHelmData.mockRejectedValueOnce(
-      new MissingBlobTokenError(),
+      new MissingStorageCredentialsError(),
     );
 
     const request = new Request("http://localhost/api/v1/cron", {
@@ -277,7 +277,7 @@ describe("POST /api/v1/cron", () => {
     expect(response.status).toBe(200);
 
     const text = await streamToText(response);
-    expect(text).toContain("[error] BLOB_READ_WRITE_TOKEN is not configured");
+    expect(text).toContain("[error] Storage credentials are not configured");
     expect(text).toContain("[status] failed");
   });
 

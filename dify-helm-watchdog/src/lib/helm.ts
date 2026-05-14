@@ -16,6 +16,9 @@ import type {
   StoredAsset,
   StoredVersion,
 } from "./types";
+import { MissingStorageCredentialsError } from "./storage-errors";
+
+export { MissingStorageCredentialsError } from "./storage-errors";
 import {
   HELM_INDEX_URL,
   HELM_REPO_BASE,
@@ -296,15 +299,7 @@ export interface SyncOptions {
   forceVersions?: string[];
 }
 
-export class MissingBlobTokenError extends Error {
-  constructor() {
-    super(
-      "BLOB_READ_WRITE_TOKEN is not configured. Please create a Vercel Blob store and expose the token before triggering the cron job.",
-    );
-  }
-}
-
-const ensureBlobAccess = async (): Promise<void> => {
+const ensureStorageAccess = async (): Promise<void> => {
   return await storage.ensureAccess();
 };
 
@@ -967,7 +962,7 @@ export const loadCache = async (): Promise<CachePayload | null> => {
     // In development: reads from local file system
     return enrichWithInlineContent(sanitizedRemote);
   } catch (error) {
-    if (error instanceof MissingBlobTokenError) {
+    if (error instanceof MissingStorageCredentialsError) {
       throw error;
     }
 
@@ -1014,7 +1009,7 @@ export const syncHelmData = async (
 ): Promise<SyncResult> => {
   const log = options.log ?? (() => {});
 
-  await ensureBlobAccess();
+  await ensureStorageAccess();
 
   const forcedVersions = new Set(
     (options.forceVersions ?? [])

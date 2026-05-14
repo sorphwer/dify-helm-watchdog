@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**dify-helm-watchdog** is a Next.js application that monitors the [Dify Helm chart](https://langgenius.github.io/dify-helm) by taking daily snapshots of chart versions. It provides a cyber-dark themed dashboard and RESTful API for accessing Helm chart metadata, values.yaml files, Docker image lists, and image validation results. All artifacts are cached in Vercel Blob storage.
+**dify-helm-watchdog** is a Next.js application that monitors the [Dify Helm chart](https://langgenius.github.io/dify-helm) by taking daily snapshots of chart versions. It provides a cyber-dark themed dashboard and RESTful API for accessing Helm chart metadata, values.yaml files, Docker image lists, and image validation results. All artifacts are cached in Cloudflare R2 (S3-compatible) and served publicly through a custom domain.
 
 ## Development Commands
 
@@ -35,7 +35,11 @@ yarn start
 Required environment variables (copy from `.env.example`):
 
 ```bash
-BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..." # Vercel Blob storage token
+R2_ACCOUNT_ID="..."                        # Cloudflare account ID
+R2_ACCESS_KEY_ID="..."                     # R2 S3 API token (Object Read & Write)
+R2_SECRET_ACCESS_KEY="..."
+R2_BUCKET="dify-helm-watchdog"             # Bucket name
+R2_PUBLIC_BASE_URL="https://dify-watchdog-blobs.langgenius.app" # Custom domain bound to the bucket
 CRON_API_KEY="..."                         # Optional: protects /api/v1/cron endpoint
 
 # Analytics (optional — without these, tracking + /dashboard are no-ops)
@@ -44,7 +48,7 @@ ANALYTICS_WORKER_SECRET="..."              # HMAC secret, must match the Cloudfl
 ANALYTICS_SESSION_SALT="..."               # salts sha256(ip + ua + salt) for the session hash
 ```
 
-Create `.env.local` for local development. The cron endpoint requires the blob token even in development. The three analytics vars can be omitted locally; with them unset, `trackEvent()` is a no-op and `/dashboard` shows empty stats — the rest of the app is unaffected.
+Create `.env.local` for local development. The cron endpoint requires the R2 credentials in production; for local development you can either set them or use `ENABLE_LOCAL_MODE=true` to fall back to filesystem storage under `.cache/helm/`. The three analytics vars can be omitted locally; with them unset, `trackEvent()` is a no-op and `/dashboard` shows empty stats — the rest of the app is unaffected.
 
 ## Architecture
 
@@ -61,11 +65,11 @@ syncHelmData() in lib/helm.ts
   ├─ Extract docker-images.yaml
   └─ Validate Docker images exist in registries
   ↓
-Store in Vercel Blob
+Store in Cloudflare R2 (helm-watchdog/ prefix)
   ├─ cache.json (version metadata, hashes)
   ├─ values/*.yaml
   ├─ images/*.yaml
-  └─ validation/*.json
+  └─ image-validation/*.json
   ↓
 Next.js UI + REST API + MCP Endpoints
 ```
@@ -124,7 +128,7 @@ yarn test
 Tests follow the `src/test/api/v1/` structure matching the API routes. Each test file mocks:
 - `@/lib/helm` (loadCache, syncHelmData)
 - `next/cache` (revalidatePath)
-- Global `fetch` for blob storage requests
+- Global `fetch` for R2 object reads (URLs are publicly fetchable via the custom domain)
 
 Key test patterns:
 - All tests use `beforeEach`/`afterEach` for mock cleanup
@@ -174,7 +178,7 @@ The validation pipeline (in `lib/validation.ts`):
    - Detect registry (Docker Hub, GHCR)
    - Query manifest API for all platforms (linux/amd64, linux/arm64, etc.)
    - Record found/missing status with digest
-3. Store validation results as JSON in blob storage
+3. Store validation results as JSON in R2
 4. Aggregate status: `ALL_FOUND`, `PARTIAL`, `MISSING`, `ERROR`
 
 Status aggregation is used in:
@@ -272,7 +276,7 @@ Deployment is configured via `vercel.json`:
 }
 ```
 
-The cron runs daily at 2am UTC. Ensure `BLOB_READ_WRITE_TOKEN` is configured in Vercel project settings.
+The cron runs daily at 2am UTC. Ensure the five `R2_*` environment variables are configured in Vercel project settings.
 
 ## Shell Scripts (Root Directory)
 
@@ -307,7 +311,7 @@ These scripts are independent utilities for manual inspection and were likely us
 
 ### Cache invalidation
 
-After updating blob storage, call:
+After updating R2, call:
 ```typescript
 import { revalidatePath } from 'next/cache';
 revalidatePath("/", "page"); // Invalidate homepage
@@ -315,7 +319,7 @@ revalidatePath("/", "page"); // Invalidate homepage
 
 ### Reading inline vs. fetched content
 
-Version metadata includes both inline content (for quick access) and blob URLs:
+Version metadata includes both inline content (for quick access) and public R2 URLs:
 
 ```typescript
 const version = cache.versions.find(v => v.version === "1.0.0");

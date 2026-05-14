@@ -72,7 +72,7 @@ export interface HeadResult {
   size: number;
   uploadedAt: Date;
   downloadedAt?: Date;
-  downloadUrl?: string; // For compatibility with Vercel Blob
+  downloadUrl?: string;
 }
 
 export interface Storage {
