@@ -48,6 +48,7 @@
     "@types/swagger-ui-react": "^5.18.0",
     "@types/tar-stream": "3.1.4",
     "@types/turndown": "^5.0.6",
+    "@vercel/blob": "^2.3.3",
     "code-inspector-plugin": "^1.2.10",
     "eslint": "^9",
     "eslint-config-next": "15.5.6",
