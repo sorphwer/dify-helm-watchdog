@@ -76,7 +76,8 @@ export class R2StorageService implements Storage {
 
   private buildPublicUrl(key: string): string {
     if (!this.publicBaseUrl) throw new Error("R2 client not initialized");
-    return `${this.publicBaseUrl}/${key}`;
+    const normalized = key.startsWith("/") ? key.slice(1) : key;
+    return `${this.publicBaseUrl}/${normalized}`;
   }
 
   async ensureAccess(): Promise<void> {
@@ -101,7 +102,9 @@ export class R2StorageService implements Storage {
         url,
         pathname: assetPath,
         size: result.ContentLength ?? 0,
-        uploadedAt: result.LastModified ?? new Date(),
+        // R2 always populates LastModified for existing objects; epoch sentinel
+        // makes any missing value visible rather than implying "just uploaded".
+        uploadedAt: result.LastModified ?? new Date(0),
         downloadUrl: url,
       };
     } catch (error) {

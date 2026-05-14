@@ -16,8 +16,6 @@ import type {
   StoredAsset,
   StoredVersion,
 } from "./types";
-import { MissingStorageCredentialsError } from "./storage-errors";
-
 export { MissingStorageCredentialsError } from "./storage-errors";
 import {
   HELM_INDEX_URL,
@@ -962,10 +960,9 @@ export const loadCache = async (): Promise<CachePayload | null> => {
     // In development: reads from local file system
     return enrichWithInlineContent(sanitizedRemote);
   } catch (error) {
-    if (error instanceof MissingStorageCredentialsError) {
-      throw error;
-    }
-
+    // Missing storage credentials are tolerated here so prerender / preview
+    // builds without R2 env vars still succeed (page renders empty state).
+    // Cron paths surface the same error explicitly via ensureStorageAccess().
     console.error("[helm-cache] Failed to load cache", error);
     return null;
   }
