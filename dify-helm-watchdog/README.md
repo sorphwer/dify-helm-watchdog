@@ -1,11 +1,11 @@
 # dify-helm-watchdog
 
-Cyber-dark dashboard that snapshots the [Dify Helm chart](https://langgenius.github.io/dify-helm) every day. A scheduled Vercel Cron job downloads new chart versions, extracts `values.yaml` and a curated `docker-images.yaml`, caches both artifacts in Vercel Blob storage, and exposes them through a Tailwind + shadcn styled Next.js UI.
+Cyber-dark dashboard that snapshots the [Dify Helm chart](https://langgenius.github.io/dify-helm) every day. A scheduled Vercel Cron job downloads new chart versions, extracts `values.yaml` and a curated `docker-images.yaml`, caches both artifacts in Cloudflare R2, and exposes them through a Tailwind + shadcn styled Next.js UI.
 
 ## Features
 
 - **Daily cron** via `/api/v1/cron` (configured in `vercel.json`) keeps `cache.json`, `values.yaml`, and `docker-images.yaml` files fresh.
-- **Vercel Blob storage** persists cached artifacts; hashes are tracked in `cache.json` for quick diffing.
+- **Cloudflare R2** persists cached artifacts via the S3-compatible API, served publicly through a custom domain; hashes are tracked in `cache.json` for quick diffing.
 - **Cyber dark UI** with a left-hand version rail and dual copyable code panes powered by a shadcn-inspired `CodeBlock`.
 - **Public usage dashboard** at `/dashboard` showing MCP / REST / page-view counts plus top countries, backed by a Cloudflare Worker + Analytics Engine (no IPs, UAs, or bodies stored — only a hashed session ID and a derived country code).
 - **RESTful API** for programmatic access:
@@ -24,7 +24,7 @@ Cyber-dark dashboard that snapshots the [Dify Helm chart](https://langgenius.git
 
 - Node.js 20+
 - Yarn (project uses `yarn.lock`)
-- Vercel account with Blob storage enabled
+- Vercel account (deployment) and Cloudflare account with an R2 bucket + S3 API token
 
 ## Local Setup
 
@@ -36,9 +36,9 @@ Cyber-dark dashboard that snapshots the [Dify Helm chart](https://langgenius.git
 2. Configure environment variables:
    ```bash
    cp .env.example .env.local
-   # Edit .env.local and set BLOB_READ_WRITE_TOKEN
+   # Edit .env.local and set the R2_* variables
    ```
-   Create a token with `vercel storage ls` or the Vercel dashboard. The cron endpoint requires this token even in development.
+   Create an R2 bucket in the Cloudflare dashboard, then generate an S3 API token (Object Read & Write) scoped to that bucket. Attach a public custom domain and use it as `R2_PUBLIC_BASE_URL`. To skip R2 entirely during local development, set `ENABLE_LOCAL_MODE=true` and the cache will be written under `.cache/helm/` instead.
 
 3. Run the dev server:
    ```bash
@@ -54,7 +54,7 @@ Cyber-dark dashboard that snapshots the [Dify Helm chart](https://langgenius.git
 ## Deployment Notes
 
 - `vercel.json` schedules the cron at `0 2 * * *` UTC. Adjust as needed.
-- Ensure `BLOB_READ_WRITE_TOKEN` (or project level Vercel Blob integration) is configured in the Vercel project settings.
+- Ensure the five `R2_*` variables (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`) are configured in the Vercel project settings.
 - No additional build steps are required; the cron uses Next.js App Router API routes.
 
 ## Development Commands
@@ -70,7 +70,7 @@ Cyber-dark dashboard that snapshots the [Dify Helm chart](https://langgenius.git
 
 ```
 ┌────────────┐      ┌───────────────────────────┐      ┌─────────────────┐
-│ Vercel Cron│ ---> │ /api/v1/cron (syncHelmData)  │ ---> │ Vercel Blob     │
+│ Vercel Cron│ ---> │ /api/v1/cron (syncHelmData)  │ ---> │ Cloudflare R2   │
 └────────────┘      │ - fetch index.yaml        │      │ cache.json       │
                     │ - extract values/images   │      │ values/*.yaml    │
                     └───────────────────────────┘      │ images/*.yaml    │

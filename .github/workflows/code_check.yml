@@ -47,8 +47,7 @@ jobs:
       - name: Build project
         run: yarn build
         env:
-          # 使用示例环境变量，构建时不需要实际的 Blob token
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN || 'dummy-token-for-build' }}
+          # CI builds run in local mode, so no R2 credentials are needed.
           ENABLE_LOCAL_MODE: 'true'
 
       - name: Check build output

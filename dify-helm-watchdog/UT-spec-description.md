@@ -163,8 +163,8 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
     - **Validates:** Skip detection and reporting
 
 **Error Handling:**
-11. **MissingBlobTokenError**
-    - **Scenario:** Blob storage token not configured
+11. **MissingStorageCredentialsError**
+    - **Scenario:** R2 credentials not configured
     - **Expected:** Returns friendly error message, status=failed
     - **Validates:** Custom error handling
 
@@ -335,7 +335,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 **Data Fetching:**
 7. **Fetch From URL**
    - **Scenario:** Inline content not available
-   - **Expected:** Fetches from blob URL
+   - **Expected:** Fetches from R2 URL
    - **Validates:** HTTP fetch call, URL usage
 
 8. **Fetch Failure**
@@ -399,7 +399,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 
 4. **Fetch From URL**
    - **Scenario:** Inline not available
-   - **Expected:** Fetches from blob URL
+   - **Expected:** Fetches from R2 URL
    - **Validates:** HTTP fetch with correct URL
 
 5. **Fetch Failure**
@@ -450,7 +450,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 
 5. **Fetch From URL**
    - **Scenario:** Inline not available
-   - **Expected:** Fetches from blob URL, normalizes data
+   - **Expected:** Fetches from R2 URL, normalizes data
    - **Validates:** HTTP fetch, JSON parsing
 
 6. **Fetch Failure**
@@ -585,7 +585,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 1. **`@/lib/helm`**
    - `loadCache()`: Returns mock cache data
    - `syncHelmData()`: Simulates sync operations
-   - `MissingBlobTokenError`: Custom error class
+   - `MissingStorageCredentialsError`: Custom error class
 
 2. **`next/cache`**
    - `revalidatePath()`: Tracks ISR revalidation calls
@@ -799,7 +799,7 @@ All tests run quickly (< 5 seconds typical) suitable for:
 4. **Mock Data Drift:** Mock data may diverge from actual production data structure
 
 ### Suggested Improvements
-1. **Integration Tests:** Add tests with real cache files and blob storage
+1. **Integration Tests:** Add tests with real cache files and R2 storage
 2. **Snapshot Testing:** Use Jest snapshots for complex response structures
 3. **Coverage Reporting:** Enable and enforce minimum coverage thresholds
 4. **Property-Based Testing:** Use libraries like `fast-check` for edge case discovery

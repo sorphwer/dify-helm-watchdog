@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createErrorResponse } from "@/lib/api/response";
 import {
-  MissingBlobTokenError,
+  MissingStorageCredentialsError,
   type SyncResult,
   syncHelmData,
 } from "@/lib/helm";
@@ -237,7 +237,7 @@ const createStreamResponse = (request: Request) => {
       } catch (error) {
         statusLine = "[status] failed";
 
-        if (error instanceof MissingBlobTokenError) {
+        if (error instanceof MissingStorageCredentialsError) {
           write(`[error] ${error.message}`);
         } else if (error instanceof Error) {
           write(`[error] ${error.message}`);
