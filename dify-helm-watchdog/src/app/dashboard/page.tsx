@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 
 import {
   queryAnalytics,
@@ -8,6 +9,12 @@ import {
 } from "@/lib/analytics/track";
 
 import { WindowToggle } from "./window-toggle";
+
+const getCachedAnalytics = unstable_cache(
+  (window: "7d" | "30d" | "90d") => queryAnalytics(window),
+  ["dashboard-analytics"],
+  { revalidate: 300, tags: ["analytics"] },
+);
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -195,7 +202,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   let errorMessage: string | null = null;
 
   try {
-    data = await queryAnalytics(windowParam);
+    data = await getCachedAnalytics(windowParam);
   } catch (error) {
     errorMessage =
       error instanceof Error ? error.message : "analytics unavailable";
