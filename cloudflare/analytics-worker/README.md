@@ -23,6 +23,15 @@ No raw IP, user-agent, referrer, URL params, or body is ever stored. Country
 is set by Vercel's edge based on the caller IP and cannot be forged by the
 client (it never appears in the JSON-RPC / HTTP body).
 
+## `/query` response
+
+`POST /query` (signed) returns window-aggregated stats: per-kind totals
+(`mcp` / `api` / `page`), `byCountry` (top countries), and `timeseries` —
+one `{ date, country, hits }` row per day per country
+(`GROUP BY toStartOfInterval(timestamp, INTERVAL '1' DAY), blob3`). The
+dashboard rolls the daily rows up to weekly buckets client-side for the 90d
+window; the SQL always returns daily granularity.
+
 ## What exists in Cloudflare (as of first deploy)
 
 | Resource | Identifier | Where to find it |

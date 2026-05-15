@@ -32,6 +32,12 @@ interface CountryStats {
   uv: number;
 }
 
+interface TimeseriesRow {
+  date: string;
+  country: string;
+  hits: number;
+}
+
 interface QueryResult {
   window: Window;
   generatedAt: string;
@@ -39,6 +45,7 @@ interface QueryResult {
   api: KindStats;
   page: KindStats;
   byCountry: CountryStats[];
+  timeseries: TimeseriesRow[];
 }
 
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
@@ -157,6 +164,7 @@ interface AnalyticsRow {
   hits?: number;
   uv?: number;
   country?: string;
+  day?: string;
 }
 
 interface AnalyticsResponse {
@@ -271,6 +279,37 @@ const queryCountries = async (
     .slice(0, 20);
 };
 
+const queryTimeseries = async (
+  env: Env,
+  days: number,
+): Promise<TimeseriesRow[]> => {
+  // One row per (day, country). Always daily — the dashboard rolls daily
+  // buckets up to weekly client-side, so the SQL stays single-shaped.
+  // toStartOfInterval is the day-truncation function accepted by AE SQL.
+  const sql = `
+    SELECT
+      blob3 AS country,
+      toStartOfInterval(timestamp, INTERVAL '1' DAY) AS day,
+      sum(_sample_interval) AS hits
+    FROM ${DATASET}
+    WHERE timestamp > NOW() - INTERVAL '${days}' DAY
+    GROUP BY country, day
+    ORDER BY day DESC
+    LIMIT 10000
+    FORMAT JSON
+  `;
+  const rows = await runSql(env, sql);
+  return rows.map((row) => {
+    const raw = String(row.country ?? "");
+    const country = /^[A-Z]{2}$/.test(raw) ? raw : "XX";
+    return {
+      date: String(row.day ?? "").slice(0, 10),
+      country,
+      hits: Number(row.hits ?? 0),
+    };
+  });
+};
+
 const handleQuery = async (
   payload: unknown,
   env: Env,
@@ -281,11 +320,18 @@ const handleQuery = async (
   const days = WINDOW_DAYS[payload.window];
 
   try {
-    const [mcp, api, page, byCountry] = await Promise.all([
+    const [mcp, api, page, byCountry, timeseries] = await Promise.all([
       queryKind(env, "mcp", days),
       queryKind(env, "api", days),
       queryKind(env, "page", days),
       queryCountries(env, days),
+      // Non-fatal: a timeseries failure (e.g. an AE SQL rejection) must not
+      // take down the rest of /query — the dashboard panels keep working and
+      // only the time-series chart degrades to its empty state.
+      queryTimeseries(env, days).catch((error): TimeseriesRow[] => {
+        console.error("queryTimeseries failed", error);
+        return [];
+      }),
     ]);
     const result: QueryResult = {
       window: payload.window,
@@ -294,6 +340,7 @@ const handleQuery = async (
       api,
       page,
       byCountry,
+      timeseries,
     };
     return new Response(JSON.stringify(result), {
       status: 200,
