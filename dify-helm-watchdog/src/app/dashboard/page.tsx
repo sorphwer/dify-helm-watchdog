@@ -193,7 +193,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 px-6 py-12">
+    <main className="mx-auto flex min-h-full max-w-5xl flex-col gap-8 px-6 py-12">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-emerald-400/80">
