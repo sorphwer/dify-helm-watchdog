@@ -98,6 +98,12 @@ export interface CountryStats {
   uv: number;
 }
 
+export interface TimeseriesRow {
+  date: string;
+  country: string;
+  hits: number;
+}
+
 export interface AnalyticsQueryResponse {
   window: "7d" | "30d" | "90d";
   generatedAt: string;
@@ -105,6 +111,8 @@ export interface AnalyticsQueryResponse {
   api: KindStats;
   page: KindStats;
   byCountry: CountryStats[];
+  // Optional: absent until the analytics worker carrying queryTimeseries is deployed.
+  timeseries?: TimeseriesRow[];
 }
 
 export const queryAnalytics = async (

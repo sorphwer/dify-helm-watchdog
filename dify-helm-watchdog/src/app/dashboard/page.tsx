@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 
+import { TrafficChartLoader } from "@/components/analytics/traffic-chart-loader";
+import { COUNTRY_NAMES, countryFlag } from "@/lib/analytics/countries";
+import { buildTrafficSeries } from "@/lib/analytics/timeseries";
 import {
   queryAnalytics,
   type AnalyticsQueryResponse,
@@ -110,36 +113,6 @@ function Panel({ title, subtitle, stats, showBreakdown }: PanelProps) {
 
 const EMPTY_STATS: KindStats = { total: 0, uv: 0, byName: [] };
 
-const COUNTRY_NAMES: Record<string, string> = {
-  US: "United States",
-  CN: "China",
-  JP: "Japan",
-  KR: "South Korea",
-  DE: "Germany",
-  GB: "United Kingdom",
-  FR: "France",
-  IN: "India",
-  SG: "Singapore",
-  HK: "Hong Kong",
-  TW: "Taiwan",
-  CA: "Canada",
-  AU: "Australia",
-  NL: "Netherlands",
-  BR: "Brazil",
-  RU: "Russia",
-  XX: "Unknown",
-};
-
-const countryFlag = (code: string): string => {
-  if (code === "XX" || !/^[A-Z]{2}$/.test(code)) return "🌐";
-  const A = 0x41;
-  const REGIONAL_INDICATOR_A = 0x1f1e6;
-  return (
-    String.fromCodePoint(code.charCodeAt(0) - A + REGIONAL_INDICATOR_A) +
-    String.fromCodePoint(code.charCodeAt(1) - A + REGIONAL_INDICATOR_A)
-  );
-};
-
 function CountryPanel({ rows }: { rows: CountryStats[] }) {
   const top = rows.slice(0, 10);
   const max = top.reduce((m, r) => (r.hits > m ? r.hits : m), 0) || 1;
@@ -212,6 +185,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const api = data?.api ?? EMPTY_STATS;
   const page = data?.page ?? EMPTY_STATS;
   const byCountry = data?.byCountry ?? [];
+  const traffic = buildTrafficSeries(data?.timeseries ?? [], windowParam);
   const generatedAt = data?.generatedAt
     ? new Date(data.generatedAt).toLocaleString("en-US", {
         timeZone: "UTC",
@@ -242,6 +216,18 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           analytics unavailable: {errorMessage}
         </div>
       ) : null}
+
+      <section className="flex flex-col gap-4 rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-5">
+        <header>
+          <p className="text-xs uppercase tracking-widest text-zinc-500">
+            traffic over time
+          </p>
+          <h2 className="mt-1 font-mono text-sm text-zinc-200">
+            Requests by country
+          </h2>
+        </header>
+        <TrafficChartLoader buckets={traffic.buckets} series={traffic.series} />
+      </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Panel
