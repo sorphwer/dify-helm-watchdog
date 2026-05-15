@@ -325,7 +325,13 @@ const handleQuery = async (
       queryKind(env, "api", days),
       queryKind(env, "page", days),
       queryCountries(env, days),
-      queryTimeseries(env, days),
+      // Non-fatal: a timeseries failure (e.g. an AE SQL rejection) must not
+      // take down the rest of /query — the dashboard panels keep working and
+      // only the time-series chart degrades to its empty state.
+      queryTimeseries(env, days).catch((error): TimeseriesRow[] => {
+        console.error("queryTimeseries failed", error);
+        return [];
+      }),
     ]);
     const result: QueryResult = {
       window: payload.window,
