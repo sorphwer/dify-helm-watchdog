@@ -294,8 +294,8 @@ const queryTimeseries = async (
     FROM ${DATASET}
     WHERE timestamp > NOW() - INTERVAL '${days}' DAY
     GROUP BY country, day
-    ORDER BY day ASC
-    LIMIT 5000
+    ORDER BY day DESC
+    LIMIT 10000
     FORMAT JSON
   `;
   const rows = await runSql(env, sql);
