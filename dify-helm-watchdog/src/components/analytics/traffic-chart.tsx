@@ -15,7 +15,6 @@ import {
   COUNTRY_COLORS,
   OTHER_COLOR,
   OTHER_LABEL,
-  countryFlag,
   countryLabel,
 } from "@/lib/analytics/countries";
 import type { TrafficSeries } from "@/lib/analytics/timeseries";
@@ -31,6 +30,7 @@ echarts.use([
 interface TooltipParam {
   seriesName: string;
   value: number;
+  color: string;
   axisValueLabel: string;
 }
 
@@ -53,8 +53,9 @@ const formatTooltip = (raw: unknown): string => {
   }
   const body = rows
     .map((p) => {
-      const name = `${countryFlag(p.seriesName)} ${countryLabel(p.seriesName)}`;
-      return `<div style="display:flex;justify-content:space-between;gap:16px"><span>${name}</span><span style="color:#e4e4e7">${Number(p.value).toLocaleString("en-US")}</span></div>`;
+      const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${p.color};margin-right:6px"></span>`;
+      const name = countryLabel(p.seriesName);
+      return `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot}${name}</span><span style="color:#e4e4e7">${Number(p.value).toLocaleString("en-US")}</span></div>`;
     })
     .join("");
   const totalRow = `<div style="display:flex;justify-content:space-between;gap:16px;margin-top:4px;border-top:1px solid #3f3f46;padding-top:4px;color:#a1a1aa"><span>total</span><span>${total.toLocaleString("en-US")}</span></div>`;
@@ -92,12 +93,9 @@ export default function TrafficChart({ buckets, series }: TrafficSeries) {
       legend: {
         top: 0,
         textStyle: { color: "#a1a1aa", fontFamily: "monospace", fontSize: 11 },
-        // No color swatch — the flag emoji alone identifies each country.
-        itemWidth: 0,
-        itemHeight: 0,
-        itemGap: 14,
-        formatter: (name: string) =>
-          `${countryFlag(name)} ${countryLabel(name)}`,
+        itemWidth: 10,
+        itemHeight: 10,
+        formatter: (name: string) => countryLabel(name),
       },
       tooltip: {
         trigger: "axis",
