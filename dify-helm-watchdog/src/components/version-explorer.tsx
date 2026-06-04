@@ -278,6 +278,10 @@ const MANUAL_VERSION_STATUS: ReadonlyMap<string, VersionStatus> = new Map([
   ["3.10.0", "non-skippable"],
 ]);
 
+// Versions explicitly excluded from the LTS badge, even though they'd
+// otherwise match the version-range rule for LTS.
+const MANUAL_NON_LTS: ReadonlySet<string> = new Set(["3.10.0"]);
+
 const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
   const map = new Map<string, VersionStatus>();
   const lines = content.split("\n");
@@ -1026,7 +1030,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                   const isActive = version.version === selectedVersion;
                   const showDiffIcon = !isActive && Boolean(selectedVersion);
                   const showWizardButton = isActive;
-                  const isLts = semver.valid(version.version) && semver.gte(version.version, "3.9.0");
+                  const isLts =
+                    !MANUAL_NON_LTS.has(version.version) &&
+                    semver.valid(version.version) &&
+                    semver.gte(version.version, "3.9.0");
                   return (
                     <motion.li
                       key={version.version}
