@@ -1,5 +1,6 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
 import { loadCache } from "@/lib/helm";
+import { isSkippable } from "@/lib/version-status";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,8 @@ export async function GET(
       createTime: versionEntry.createTime ?? null,
       chartUrl: versionEntry.chartUrl,
       digest: versionEntry.digest,
+      status: versionEntry.status ?? null,
+      skippable: isSkippable(versionEntry.status),
       assets: {
         values: {
           path: versionEntry.values.path,

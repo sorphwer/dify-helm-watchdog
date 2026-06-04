@@ -73,8 +73,48 @@ describe("GET /api/v1/versions", () => {
           appVersion: "1.0.0",
           createTime: "2024-01-01T00:00:00.000Z",
           digest: "sha256:123",
+          status: null,
+          skippable: true,
         },
       ],
+    });
+  });
+
+  it("should surface upgrade-path status and skippable flag", async () => {
+    mockedLoadCache.mockResolvedValueOnce({
+      updateTime: "2024-03-01T00:00:00.000Z",
+      versions: [
+        {
+          version: "3.8.0",
+          appVersion: null,
+          createTime: null,
+          chartUrl: "https://example.com/chart-3.8.0.tgz",
+          digest: undefined,
+          status: "non-skippable",
+          values: {
+            path: "values/3.8.0.yaml",
+            url: "https://example.com/values-3.8.0.yaml",
+            hash: "values-hash-3",
+          },
+          images: {
+            path: "images/3.8.0.yaml",
+            url: "https://example.com/images-3.8.0.yaml",
+            hash: "images-hash-3",
+          },
+        },
+      ],
+    });
+
+    const request = new Request("http://localhost/api/v1/versions");
+    const response = await GET(request);
+    const payload = (await response.json()) as {
+      versions: Array<{ status: string | null; skippable: boolean }>;
+    };
+
+    expect(payload.versions[0]).toMatchObject({
+      version: "3.8.0",
+      status: "non-skippable",
+      skippable: false,
     });
   });
 

@@ -1,7 +1,8 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
 import { loadCache } from "@/lib/helm";
-import type { ImageValidationRecord, StoredVersion } from "@/lib/types";
+import type { ImageValidationRecord, StoredVersion, VersionStatus } from "@/lib/types";
 import { countValidationStatuses } from "@/lib/validation";
+import { isSkippable } from "@/lib/version-status";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,8 @@ interface VersionSummary {
   appVersion: string | null;
   createTime: string | null;
   digest?: string;
+  status: VersionStatus | null;
+  skippable: boolean;
   imageValidation?: {
     total: number;
     allFound: number;
@@ -114,6 +117,8 @@ export async function GET(request: Request) {
           appVersion: version.appVersion ?? null,
           createTime: version.createTime ?? null,
           digest: version.digest,
+          status: version.status ?? null,
+          skippable: isSkippable(version.status),
         };
 
         if (includeValidation) {
