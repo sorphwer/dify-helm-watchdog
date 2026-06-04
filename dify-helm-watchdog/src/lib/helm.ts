@@ -32,6 +32,7 @@ import {
   IMAGE_VARIANT_NAMES,
 } from "../constants/helm";
 import { createStorageService } from "../services/storage";
+import { fetchVersionStatusMap } from "./version-status";
 
 
 const storage = createStorageService();
@@ -1026,6 +1027,12 @@ export const syncHelmData = async (
   log("Fetching Helm repository index...");
   const indexEntries = await fetchHelmIndex();
   log(`Retrieved ${indexEntries.length} chart versions from index.`);
+
+  // Fetch upgrade-path status (non-skippable / archived / deprecated) from the
+  // official docs sidebar. Falls back to manual overrides only if unreachable.
+  log("Fetching version status from docs sidebar...");
+  const statusMap = await fetchVersionStatusMap(log);
+  log(`Resolved status for ${statusMap.size} versions.`);
   
   // In local mode, limit to latest 5 versions for faster development
   const isLocalMode = process.env.ENABLE_LOCAL_MODE === "true";
@@ -1153,7 +1160,11 @@ export const syncHelmData = async (
     }
   }
 
-  const sortedVersions = sortVersions(Array.from(knownVersions.values()));
+  // Apply the latest status to every version (including carried-over ones) so
+  // upstream changes are reflected each sync. Unmarked versions clear status.
+  const sortedVersions = sortVersions(Array.from(knownVersions.values())).map(
+    (version) => ({ ...version, status: statusMap.get(version.version) }),
+  );
   const payload: CachePayload = {
     updateTime: new Date().toISOString(),
     versions: sortedVersions,

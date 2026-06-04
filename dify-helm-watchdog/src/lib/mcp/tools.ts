@@ -9,6 +9,7 @@ import {
   fetchReleaseNotesAsMarkdown,
 } from "@/lib/release-notes";
 import type { ImageValidationRecord, StoredVersion } from "@/lib/types";
+import { isSkippable } from "@/lib/version-status";
 import { countValidationStatuses, normalizeValidationPayload } from "@/lib/validation";
 import YAML from "yaml";
 import type {
@@ -183,6 +184,8 @@ const listVersions = async (
         appVersion: version.appVersion ?? null,
         createTime: version.createTime ?? null,
         digest: version.digest,
+        status: version.status ?? null,
+        skippable: isSkippable(version.status),
       };
 
       if (includeValidation && version.imageValidation) {
@@ -229,6 +232,8 @@ const getLatestVersion = async (): Promise<McpToolResult> => {
     appVersion: latest.appVersion ?? null,
     createTime: latest.createTime ?? null,
     digest: latest.digest,
+    status: latest.status ?? null,
+    skippable: isSkippable(latest.status),
     urls: {
       self: `/api/v1/versions/${latest.version}`,
       images: `/api/v1/versions/${latest.version}/images`,
@@ -260,6 +265,8 @@ const getVersionDetails = async (
     createTime: entry.createTime ?? null,
     chartUrl: entry.chartUrl,
     digest: entry.digest,
+    status: entry.status ?? null,
+    skippable: isSkippable(entry.status),
     assets: {
       values: {
         path: entry.values.path,

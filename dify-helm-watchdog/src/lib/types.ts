@@ -13,6 +13,10 @@ export interface StoredAsset {
   inline?: string;
 }
 
+// Upgrade-path status sourced from the official Dify Helm docs sidebar.
+// Absent means a normal, skippable version.
+export type VersionStatus = "non-skippable" | "archived" | "deprecated";
+
 export interface StoredVersion {
   version: string;
   appVersion?: string | null;
@@ -22,6 +26,7 @@ export interface StoredVersion {
   values: StoredAsset;
   images: StoredAsset;
   imageValidation?: StoredAsset;
+  status?: VersionStatus;
 }
 
 export interface CachePayload {
