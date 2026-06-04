@@ -271,6 +271,13 @@ interface ImageTagEntry {
 // Version status from official Dify Helm docs sidebar
 type VersionStatus = "non-skippable" | "archived" | "deprecated";
 
+// Manual status overrides, applied on top of the official sidebar. Use this
+// when a version's status isn't (yet) reflected upstream but we want it
+// surfaced in the UI regardless.
+const MANUAL_VERSION_STATUS: ReadonlyMap<string, VersionStatus> = new Map([
+  ["3.10.0", "non-skippable"],
+]);
+
 const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
   const map = new Map<string, VersionStatus>();
   const lines = content.split("\n");
@@ -290,6 +297,11 @@ const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
     } else if (line.includes("🗑️")) {
       map.set(version, "deprecated");
     }
+  }
+
+  // Manual overrides always win over the upstream sidebar.
+  for (const [version, status] of MANUAL_VERSION_STATUS) {
+    map.set(version, status);
   }
 
   return map;
@@ -361,8 +373,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   // Workflow logs modal state
   const [logsModalOpen, setLogsModalOpen] = useState(false);
 
-  // Version status from official docs (fetched async)
-  const [versionStatusMap, setVersionStatusMap] = useState<Map<string, VersionStatus>>(new Map());
+  // Version status from official docs (fetched async); seeded with manual
+  // overrides so they show even before/without the sidebar fetch.
+  const [versionStatusMap, setVersionStatusMap] = useState<Map<string, VersionStatus>>(
+    () => new Map(MANUAL_VERSION_STATUS),
+  );
 
   const selectVersion = useCallback((v: string) => {
     setSelectedVersion(v);
