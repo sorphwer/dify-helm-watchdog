@@ -44,8 +44,12 @@ export async function middleware(
   req: NextRequest,
   fetchEvent: NextFetchEvent,
 ): Promise<NextResponse> {
-  // Read the raw, still-encoded path: nextUrl.pathname may decode percent-escapes
-  // and hide scanner payloads (%2e, %252f, ...), while URL.pathname preserves them.
+  // WHATWG URL keeps percent-encoded octets (%2e, %2f, %5c, %3a, %252f, ...)
+  // verbatim in pathname — it does NOT decode them — so encoded scanner payloads
+  // stay visible to the guard below. The only normalization is collapsing a
+  // standalone real-slash dot-segment ("/%2e%2e/" -> "/"), which is harmless:
+  // that path just 404s, and smuggling real traversal needs an ENCODED slash,
+  // which is preserved and matched. req.nextUrl.pathname behaves identically.
   const rawPath = new URL(req.url).pathname;
 
   if (rawPath.startsWith("/api/v1/")) {
