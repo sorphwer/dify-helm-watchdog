@@ -1,4 +1,5 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
+import { isValidVersion } from "@/lib/api/guard";
 import { loadCache } from "@/lib/helm";
 import { normalizeValidationPayload } from "@/lib/validation";
 
@@ -37,6 +38,16 @@ export async function GET(
 ) {
   try {
     const { version } = await params;
+
+    if (!isValidVersion(version)) {
+      return createErrorResponse({
+        request,
+        status: 400,
+        message: `Invalid version format: ${version}`,
+        statusText: "INVALID_ARGUMENT",
+      });
+    }
+
     const url = new URL(request.url);
     const isMissing = url.searchParams.get("isMissing") === "true";
 

@@ -14,7 +14,7 @@ const getSalt = (): string => {
   return process.env.ANALYTICS_SESSION_SALT?.trim() || FALLBACK_SALT;
 };
 
-const extractIp = (headers: Headers): string => {
+export const extractIp = (headers: Headers): string => {
   const forwarded = headers.get("x-forwarded-for");
   if (forwarded) {
     const first = forwarded.split(",")[0]?.trim();

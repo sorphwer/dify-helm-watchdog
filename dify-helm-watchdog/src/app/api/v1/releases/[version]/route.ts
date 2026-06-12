@@ -1,4 +1,5 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
+import { isValidVersion } from "@/lib/api/guard";
 import { sanitizeEeReleaseHtml } from "@/lib/release-notes";
 
 export const runtime = "nodejs";
@@ -34,7 +35,7 @@ export async function GET(
 ) {
   const { version } = await params;
 
-  if (!/^\d+\.\d+\.\d+/.test(version)) {
+  if (!isValidVersion(version)) {
     return createErrorResponse({
       request,
       status: 400,
