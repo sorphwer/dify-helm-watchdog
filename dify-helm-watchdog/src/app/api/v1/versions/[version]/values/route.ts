@@ -1,4 +1,5 @@
 import { createErrorResponse, createTextResponse } from "@/lib/api/response";
+import { isValidVersion } from "@/lib/api/guard";
 import { loadCache } from "@/lib/helm";
 
 export const runtime = "nodejs";
@@ -31,6 +32,15 @@ export async function GET(
 ) {
   try {
     const { version } = await params;
+
+    if (!isValidVersion(version)) {
+      return createErrorResponse({
+        request,
+        status: 400,
+        message: `Invalid version format: ${version}`,
+        statusText: "INVALID_ARGUMENT",
+      });
+    }
 
     const cache = await loadCache();
     if (!cache) {

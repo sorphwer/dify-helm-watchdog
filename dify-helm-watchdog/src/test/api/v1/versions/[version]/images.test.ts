@@ -50,6 +50,25 @@ worker:
     jest.resetAllMocks();
   });
 
+  it.each(["../etc/passwd", "169.254.169.254", "2.4", "%2e%2e"])(
+    "returns 400 for malformed version %s without calling loadCache",
+    async (version) => {
+      const request = new Request(
+        `http://localhost/api/v1/versions/${version}/images`,
+      );
+      const params = Promise.resolve({ version });
+      const response = await GET(request, { params });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadCache).not.toHaveBeenCalled();
+
+      const payload = (await response.json()) as {
+        error: { status: string };
+      };
+      expect(payload.error.status).toBe("INVALID_ARGUMENT");
+    },
+  );
+
   it("should return 404 when cache is not available", async () => {
     mockedLoadCache.mockResolvedValueOnce(null);
 
