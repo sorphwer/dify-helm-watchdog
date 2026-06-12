@@ -1,7 +1,9 @@
 import {
   checkRateLimit,
   RATE_LIMIT_MAX_HITS,
+  RATE_LIMIT_MAX_KEYS,
   RATE_LIMIT_WINDOW_MS,
+  __rateLimitSize,
   __resetRateLimit,
 } from "@/lib/api/rate-limit";
 
@@ -46,5 +48,29 @@ describe("checkRateLimit", () => {
       expect(checkRateLimit("0.0.0.0", now).ok).toBe(true);
       expect(checkRateLimit("", now).ok).toBe(true);
     }
+  });
+
+  it("bounds memory to MAX_KEYS under a many-IP flood", () => {
+    const now = 1_000_000;
+    for (let i = 0; i < RATE_LIMIT_MAX_KEYS + 500; i++) {
+      checkRateLimit(`10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}`, now);
+    }
+    expect(__rateLimitSize()).toBeLessThanOrEqual(RATE_LIMIT_MAX_KEYS);
+  });
+
+  it("keeps a recently-active key alive under eviction pressure (LRU, not FIFO)", () => {
+    const now = 1_000_000;
+    // Drive "attacker" to its limit, inserted first so naive FIFO would evict it.
+    for (let i = 0; i < RATE_LIMIT_MAX_HITS; i++) checkRateLimit("attacker", now);
+    expect(checkRateLimit("attacker", now).ok).toBe(false);
+
+    // Flood with distinct keys, touching "attacker" each round to keep it recent.
+    for (let i = 0; i < RATE_LIMIT_MAX_KEYS + 100; i++) {
+      checkRateLimit(`flood-${i}`, now);
+      checkRateLimit("attacker", now);
+    }
+
+    // It survived eviction, so its bucket is intact and still over the limit.
+    expect(checkRateLimit("attacker", now).ok).toBe(false);
   });
 });

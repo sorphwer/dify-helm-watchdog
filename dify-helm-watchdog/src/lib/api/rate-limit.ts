@@ -18,7 +18,7 @@ export const RATE_LIMIT_WINDOW_MS = resolveWindowMs();
 export const RATE_LIMIT_MAX_HITS = resolveMaxHits();
 
 // Guard against an unbounded map when a flood arrives from many distinct IPs.
-const MAX_KEYS = 10_000;
+export const RATE_LIMIT_MAX_KEYS = 10_000;
 
 const hits = new Map<string, number[]>();
 
@@ -39,6 +39,10 @@ export const checkRateLimit = (
   const cutoff = now - RATE_LIMIT_WINDOW_MS;
   const recent = (hits.get(key) ?? []).filter((t) => t > cutoff);
 
+  // delete + re-set moves this key to the most-recently-used end of the Map, so
+  // insertion order tracks recency and the overflow eviction below is true LRU.
+  hits.delete(key);
+
   if (recent.length >= RATE_LIMIT_MAX_HITS) {
     hits.set(key, recent);
     const retryAfter = Math.max(
@@ -51,13 +55,12 @@ export const checkRateLimit = (
   recent.push(now);
   hits.set(key, recent);
 
-  // Opportunistically drop fully-expired keys so idle entries don't accumulate.
-  if (hits.size > MAX_KEYS) {
-    for (const [k, times] of hits) {
-      const live = times.filter((t) => t > cutoff);
-      if (live.length === 0) hits.delete(k);
-      else hits.set(k, live);
-    }
+  // Bound memory in O(1): when over capacity, evict the least-recently-used key
+  // (first in insertion order). A full O(N) sweep on every request would block
+  // the event loop under a many-IP flood — the exact abuse this guards against.
+  if (hits.size > RATE_LIMIT_MAX_KEYS) {
+    const oldest = hits.keys().next().value;
+    if (oldest !== undefined) hits.delete(oldest);
   }
 
   return { ok: true, retryAfter: 0 };
@@ -67,3 +70,6 @@ export const checkRateLimit = (
 export const __resetRateLimit = (): void => {
   hits.clear();
 };
+
+// Test-only: current number of tracked keys.
+export const __rateLimitSize = (): number => hits.size;
