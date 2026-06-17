@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Info, RefreshCw } from "lucide-react";
 import type {
+  ChartMirrorStatus,
   ImageValidationPayload,
   ImageValidationRecord,
   ImageVariantName,
@@ -27,6 +28,12 @@ const variantLabels: Record<ImageVariantStatus, string> = {
   FOUND: "Available",
   MISSING: "Missing",
   ERROR: "Error",
+};
+
+const chartMirrorLabels: Record<ChartMirrorStatus, string> = {
+  FOUND: "In mirror",
+  MISSING: "Not mirrored",
+  ERROR: "Check failed",
 };
 
 const formatTimestamp = (input?: string | null) => {
@@ -241,6 +248,45 @@ export function ImageValidationTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
+            {data.chartMirror ? (
+              <tr className="bg-muted/40">
+                <td className="px-4 py-3 align-top">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-mono text-[12px] font-semibold text-foreground">
+                      Helm chart · dify-{data.version}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Mirror →{" "}
+                      <span className="font-mono text-muted-foreground">
+                        {data.chartMirror.repoUrl}
+                      </span>
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 align-top" colSpan={3}>
+                  <div
+                    className={`flex flex-col gap-1.5 rounded-lg border px-3 py-2 ${variantCellClasses[data.chartMirror.status]}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${variantDotClasses[data.chartMirror.status]}`}
+                        aria-hidden="true"
+                      />
+                      <span
+                        className={`text-[10px] font-semibold uppercase tracking-widest ${variantTextClasses[data.chartMirror.status]}`}
+                      >
+                        {chartMirrorLabels[data.chartMirror.status]}
+                      </span>
+                    </div>
+                    {data.chartMirror.status === "ERROR" && data.chartMirror.error ? (
+                      <span className="text-[11px] text-destructive">
+                        {data.chartMirror.error}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ) : null}
             {data.images.map((record) => {
               const mirrorPath = `${data.host}/${data.namespace}/${record.targetImageName}`;
               return (

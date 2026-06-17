@@ -28,11 +28,13 @@ import {
   LOCAL_CACHE_PATH_RELATIVE,
   DEFAULT_CODING_REGISTRY_HOST,
   DEFAULT_CODING_REGISTRY_NAMESPACE,
+  DEFAULT_CODING_HELM_REPO_URL,
   MANIFEST_ACCEPT_HEADER,
   IMAGE_VARIANT_NAMES,
 } from "../constants/helm";
 import { createStorageService } from "../services/storage";
 import { fetchVersionStatusMap } from "./version-status";
+import { buildChartMirrorCheck, parseDifyVersionsFromIndex } from "./chart-mirror";
 
 
 const storage = createStorageService();
@@ -334,6 +336,21 @@ const fetchHelmIndex = async (): Promise<HelmVersionEntry[]> => {
     .filter((entry) => entry.version && entry.urls.length > 0);
 };
 
+const fetchMirrorChartVersions = async (): Promise<Set<string>> => {
+  const response = await fetch(`${CODING_HELM_REPO_URL}/index.yaml`, {
+    headers: { "User-Agent": "dify-helm-watchdog" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download mirror index: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  return parseDifyVersionsFromIndex(await response.text());
+};
+
 const downloadChartArchive = async (url: string): Promise<Buffer> => {
   const response = await fetch(url, {
     headers: { "User-Agent": "dify-helm-watchdog" },
@@ -493,6 +510,9 @@ const CODING_REGISTRY_HOST =
   process.env.CODING_REGISTRY_HOST ?? DEFAULT_CODING_REGISTRY_HOST;
 const CODING_REGISTRY_NAMESPACE =
   process.env.CODING_REGISTRY_NAMESPACE ?? DEFAULT_CODING_REGISTRY_NAMESPACE;
+const CODING_HELM_REPO_URL = (
+  process.env.CODING_HELM_REPO_URL ?? DEFAULT_CODING_HELM_REPO_URL
+).replace(/\/+$/, "");
 const CODING_REGISTRY_AUTH_HEADER =
   process.env.CODING_REGISTRY_AUTH ??
   (process.env.CODING_REGISTRY_USERNAME &&
@@ -1057,6 +1077,26 @@ export const syncHelmData = async (
   >();
   const matchedForcedVersions = new Set<string>();
 
+  let mirrorState:
+    | { versions: Set<string> | null; error: string | null; checkTime: string }
+    | undefined;
+  const getMirrorState = async () => {
+    if (mirrorState) return mirrorState;
+    const checkTime = new Date().toISOString();
+    try {
+      mirrorState = {
+        versions: await fetchMirrorChartVersions(),
+        error: null,
+        checkTime,
+      };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : "Failed to fetch mirror index";
+      mirrorState = { versions: null, error, checkTime };
+      log(`Warning: failed to fetch Helm mirror index: ${error}`);
+    }
+    return mirrorState;
+  };
+
   for (const entry of entriesToProcess) {
     const wasKnown = knownVersions.has(entry.version);
     const isForced = forcedVersions.has(entry.version);
@@ -1088,6 +1128,14 @@ export const syncHelmData = async (
       const imageValidationPayload = await computeImageValidation(
         entry.version,
         imageEntries,
+      );
+      const mirror = await getMirrorState();
+      imageValidationPayload.chartMirror = buildChartMirrorCheck(
+        entry.version,
+        mirror.versions,
+        CODING_HELM_REPO_URL,
+        mirror.checkTime,
+        mirror.error,
       );
       const imageValidationJson = JSON.stringify(imageValidationPayload, null, 2);
 

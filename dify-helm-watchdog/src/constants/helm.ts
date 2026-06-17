@@ -20,6 +20,8 @@ export const LOCAL_CACHE_PATH_RELATIVE = `${LOCAL_CACHE_DIR_RELATIVE}/cache.json
  */
 export const DEFAULT_CODING_REGISTRY_HOST = "g-hsod9681-docker.pkg.coding.net";
 export const DEFAULT_CODING_REGISTRY_NAMESPACE = "dify-artifact/dify";
+export const DEFAULT_CODING_HELM_REPO_URL =
+  "https://g-hsod9681-helm.pkg.coding.net/dify-artifact/dify-helm";
 
 export const MANIFEST_ACCEPT_HEADER =
   "application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.oci.image.index.v1+json";
