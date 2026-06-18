@@ -956,12 +956,21 @@ const enrichWithInlineContent = async (
   };
 };
 
-export const loadCache = async (): Promise<CachePayload | null> => {
+interface LoadCacheOptions {
+  enrichInlineContent?: boolean;
+}
+
+export const loadCache = async (
+  options: LoadCacheOptions = {},
+): Promise<CachePayload | null> => {
+  const enrichInlineContentOption = options.enrichInlineContent !== false;
   try {
     const localCache = await readLocalCache();
     if (localCache) {
       const sanitizedLocal = sanitizeCachePayload(localCache);
-      return enrichWithInlineContent(sanitizedLocal);
+      return enrichInlineContentOption
+        ? enrichWithInlineContent(sanitizedLocal)
+        : sanitizedLocal;
     }
 
     const cacheMetadata = await storage.read(CACHE_PATH);
@@ -979,7 +988,9 @@ export const loadCache = async (): Promise<CachePayload | null> => {
     // Enrich with inline content for ISR
     // In production: fetches from Blob and embeds in HTML
     // In development: reads from local file system
-    return enrichWithInlineContent(sanitizedRemote);
+    return enrichInlineContentOption
+      ? enrichWithInlineContent(sanitizedRemote)
+      : sanitizedRemote;
   } catch (error) {
     // Missing storage credentials are tolerated here so prerender / preview
     // builds without R2 env vars still succeed (page renders empty state).
@@ -1063,7 +1074,7 @@ export const syncHelmData = async (
     log(`Local mode: limiting to latest ${maxVersionsToProcess} versions (${indexEntries.length} total available)`);
   }
   
-  const cache = await loadCache();
+  const cache = await loadCache({ enrichInlineContent: false });
 
   const knownVersions = new Map<string, StoredVersion>(
     cache?.versions.map((entry) => [entry.version, entry]) ?? [],
