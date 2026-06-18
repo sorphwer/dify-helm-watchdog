@@ -136,6 +136,8 @@ const createStreamResponse = (request: Request) => {
   const pauseSeconds = pauseParam
     ? Math.min(Math.max(0, parseInt(pauseParam, 10) || 0), MAX_PAUSE_SECONDS)
     : 0;
+  const mirrorOnly = url.searchParams.get("mirrorOnly") === "true";
+
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -152,6 +154,10 @@ const createStreamResponse = (request: Request) => {
             .join(", ")}`,
         );
       }
+      if (mirrorOnly) {
+        write("[input] mirror_only=true");
+      }
+
 
       if (pauseSeconds > 0) {
         write(`[input] pause=${pauseSeconds}s`);
@@ -163,6 +169,7 @@ const createStreamResponse = (request: Request) => {
       try {
         const syncResult: SyncResult = await syncHelmData({
           log: (message) => write(`[sync] ${message}`),
+          mirrorOnly,
           ...(forceVersions.length > 0 ? { forceVersions } : {}),
         });
 

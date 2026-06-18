@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Info, RefreshCw } from "lucide-react";
 import type {
+  ChartMirrorStatus,
   ImageValidationPayload,
   ImageValidationRecord,
   ImageVariantName,
@@ -27,6 +28,12 @@ const variantLabels: Record<ImageVariantStatus, string> = {
   FOUND: "Available",
   MISSING: "Missing",
   ERROR: "Error",
+};
+
+const chartMirrorLabels: Record<ChartMirrorStatus, string> = {
+  FOUND: "In mirror",
+  MISSING: "Not mirrored",
+  ERROR: "Check failed",
 };
 
 const formatTimestamp = (input?: string | null) => {
@@ -105,14 +112,12 @@ const VariantCell = ({ record, name }: { record: ImageValidationRecord; name: Im
 };
 
 export function ImageValidationTable({
-  version,
   data,
   error,
   loading,
   hasAsset,
   onRetry,
 }: ImageValidationTableProps) {
-  const lastChecked = data ? formatTimestamp(data.checkTime) : null;
 
   const summary = useMemo(() => {
     if (!data) {
@@ -185,26 +190,41 @@ export function ImageValidationTable({
   return (
     <div className="flex h-full flex-col gap-4 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-          <span>
-            Validated against{" "}
-            <span className="font-mono text-foreground">
-              {data.host}/{data.namespace}
+        {data.chartMirror ? (
+          <div
+            className={`inline-flex max-w-full flex-col justify-center gap-1.5 rounded-xl border px-3 py-2 ${variantCellClasses[data.chartMirror.status]}`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${variantDotClasses[data.chartMirror.status]}`}
+                aria-hidden="true"
+              />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                Helm chart mirror
+              </span>
+              <span
+                className={`text-[10px] font-semibold uppercase tracking-[0.24em] ${variantTextClasses[data.chartMirror.status]}`}
+              >
+                {chartMirrorLabels[data.chartMirror.status]}
+              </span>
+            </div>
+            <span className="truncate font-mono text-[11px] text-foreground">
+              dify-{data.version} · {data.chartMirror.repoUrl}
             </span>
-          </span>
-          {lastChecked ? (
-            <span>
-              Last checked:{" "}
-              <span className="text-foreground">{lastChecked}</span>
-            </span>
-          ) : null}
-          {version ? (
-            <span>
-              Chart version:{" "}
-              <span className="font-semibold text-foreground">v{version}</span>
-            </span>
-          ) : null}
-        </div>
+            {data.chartMirror.status === "ERROR" && data.chartMirror.error ? (
+              <span className="text-[11px] text-destructive">
+                {data.chartMirror.error}
+              </span>
+            ) : data.chartMirror.checkTime ? (
+              <span className="text-[11px] text-muted-foreground">
+                Mirror checked:{" "}
+                <span className="text-foreground">
+                  {formatTimestamp(data.chartMirror.checkTime)}
+                </span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {summary ? (
           <div className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
             <span className="rounded-full border border-border bg-muted px-3 py-1">

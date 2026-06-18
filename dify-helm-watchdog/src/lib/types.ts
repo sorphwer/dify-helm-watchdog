@@ -63,12 +63,22 @@ export interface ImageValidationRecord {
   status: ImageValidationOverallStatus;
 }
 
+export type ChartMirrorStatus = "FOUND" | "MISSING" | "ERROR";
+
+export interface ChartMirrorCheck {
+  repoUrl: string;
+  status: ChartMirrorStatus;
+  checkTime: string;
+  error?: string;
+}
+
 export interface ImageValidationPayload {
   version: string;
   checkTime: string;
   host: string;
   namespace: string;
   images: ImageValidationRecord[];
+  chartMirror?: ChartMirrorCheck;
 }
 
 export interface HeadResult {

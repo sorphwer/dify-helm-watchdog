@@ -28,11 +28,14 @@ import {
   LOCAL_CACHE_PATH_RELATIVE,
   DEFAULT_CODING_REGISTRY_HOST,
   DEFAULT_CODING_REGISTRY_NAMESPACE,
+  DEFAULT_CODING_HELM_REPO_URL,
   MANIFEST_ACCEPT_HEADER,
   IMAGE_VARIANT_NAMES,
 } from "../constants/helm";
 import { createStorageService } from "../services/storage";
 import { fetchVersionStatusMap } from "./version-status";
+import { buildChartMirrorCheck, parseDifyVersionsFromIndex } from "./chart-mirror";
+import { normalizeValidationPayload } from "./validation";
 
 
 const storage = createStorageService();
@@ -296,6 +299,7 @@ export interface SyncResult {
 export interface SyncOptions {
   log?: (message: string) => void;
   forceVersions?: string[];
+  mirrorOnly?: boolean;
 }
 
 const ensureStorageAccess = async (): Promise<void> => {
@@ -332,6 +336,21 @@ const fetchHelmIndex = async (): Promise<HelmVersionEntry[]> => {
       digest: entry.digest ? String(entry.digest) : undefined,
     }))
     .filter((entry) => entry.version && entry.urls.length > 0);
+};
+
+const fetchMirrorChartVersions = async (): Promise<Set<string>> => {
+  const response = await fetch(`${CODING_HELM_REPO_URL}/index.yaml`, {
+    headers: { "User-Agent": "dify-helm-watchdog" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download mirror index: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  return parseDifyVersionsFromIndex(await response.text());
 };
 
 const downloadChartArchive = async (url: string): Promise<Buffer> => {
@@ -493,6 +512,9 @@ const CODING_REGISTRY_HOST =
   process.env.CODING_REGISTRY_HOST ?? DEFAULT_CODING_REGISTRY_HOST;
 const CODING_REGISTRY_NAMESPACE =
   process.env.CODING_REGISTRY_NAMESPACE ?? DEFAULT_CODING_REGISTRY_NAMESPACE;
+const CODING_HELM_REPO_URL = (
+  process.env.CODING_HELM_REPO_URL ?? DEFAULT_CODING_HELM_REPO_URL
+).replace(/\/+$/, "");
 const CODING_REGISTRY_AUTH_HEADER =
   process.env.CODING_REGISTRY_AUTH ??
   (process.env.CODING_REGISTRY_USERNAME &&
@@ -936,12 +958,21 @@ const enrichWithInlineContent = async (
   };
 };
 
-export const loadCache = async (): Promise<CachePayload | null> => {
+interface LoadCacheOptions {
+  enrichInlineContent?: boolean;
+}
+
+export const loadCache = async (
+  options: LoadCacheOptions = {},
+): Promise<CachePayload | null> => {
+  const enrichInlineContentOption = options.enrichInlineContent !== false;
   try {
     const localCache = await readLocalCache();
     if (localCache) {
       const sanitizedLocal = sanitizeCachePayload(localCache);
-      return enrichWithInlineContent(sanitizedLocal);
+      return enrichInlineContentOption
+        ? enrichWithInlineContent(sanitizedLocal)
+        : sanitizedLocal;
     }
 
     const cacheMetadata = await storage.read(CACHE_PATH);
@@ -959,7 +990,9 @@ export const loadCache = async (): Promise<CachePayload | null> => {
     // Enrich with inline content for ISR
     // In production: fetches from Blob and embeds in HTML
     // In development: reads from local file system
-    return enrichWithInlineContent(sanitizedRemote);
+    return enrichInlineContentOption
+      ? enrichWithInlineContent(sanitizedRemote)
+      : sanitizedRemote;
   } catch (error) {
     // Missing storage credentials are tolerated here so prerender / preview
     // builds without R2 env vars still succeed (page renders empty state).
@@ -1002,6 +1035,42 @@ const sortVersions = (versions: StoredVersion[]): StoredVersion[] =>
     });
   });
 
+const refreshStoredChartMirror = async (
+  version: StoredVersion,
+  repoVersion: string,
+  getMirrorState: () => Promise<{
+    versions: Set<string> | null;
+    error: string | null;
+    checkTime: string;
+  }>,
+): Promise<{ asset: StoredAsset; payload: string }> => {
+  if (!version.imageValidation) {
+    throw new Error(`No image validation cache exists for ${version.version}`);
+  }
+
+  const validationUrl = version.imageValidation.url;
+  const rawValidation = await storage.readContent(validationUrl);
+  const validationPayload = normalizeValidationPayload(JSON.parse(rawValidation));
+  const mirror = await getMirrorState();
+
+  validationPayload.chartMirror = buildChartMirrorCheck(
+    repoVersion,
+    mirror.versions,
+    CODING_HELM_REPO_URL,
+    mirror.checkTime,
+    mirror.error,
+  );
+
+  const payload = JSON.stringify(validationPayload, null, 2);
+  const asset = await persistAsset(
+    version.imageValidation.path,
+    payload,
+    "application/json",
+  );
+
+  return { asset, payload };
+};
+
 export const syncHelmData = async (
   options: SyncOptions = {},
 ): Promise<SyncResult> => {
@@ -1043,7 +1112,7 @@ export const syncHelmData = async (
     log(`Local mode: limiting to latest ${maxVersionsToProcess} versions (${indexEntries.length} total available)`);
   }
   
-  const cache = await loadCache();
+  const cache = await loadCache({ enrichInlineContent: false });
 
   const knownVersions = new Map<string, StoredVersion>(
     cache?.versions.map((entry) => [entry.version, entry]) ?? [],
@@ -1053,9 +1122,29 @@ export const syncHelmData = async (
   const refreshedVersions: StoredVersion[] = [];
   const processedVersionPayloads = new Map<
     string,
-    { values: string; images: string; imageValidation: string }
+    { values?: string; images?: string; imageValidation?: string }
   >();
   const matchedForcedVersions = new Set<string>();
+
+  let mirrorState:
+    | { versions: Set<string> | null; error: string | null; checkTime: string }
+    | undefined;
+  const getMirrorState = async () => {
+    if (mirrorState) return mirrorState;
+    const checkTime = new Date().toISOString();
+    try {
+      mirrorState = {
+        versions: await fetchMirrorChartVersions(),
+        error: null,
+        checkTime,
+      };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : "Failed to fetch mirror index";
+      mirrorState = { versions: null, error, checkTime };
+      log(`Warning: failed to fetch Helm mirror index: ${error}`);
+    }
+    return mirrorState;
+  };
 
   for (const entry of entriesToProcess) {
     const wasKnown = knownVersions.has(entry.version);
@@ -1071,11 +1160,52 @@ export const syncHelmData = async (
     }
 
     if (isForced && wasKnown) {
-      log(`Refreshing cached version ${entry.version}`);
+      log(
+        options.mirrorOnly
+          ? `Refreshing Helm mirror check for cached version ${entry.version}`
+          : `Refreshing cached version ${entry.version}`,
+      );
     } else if (isForced && !wasKnown) {
       log(`Processing new version ${entry.version} (forced)`);
     } else {
       log(`Processing new version ${entry.version}`);
+    }
+
+    if (options.mirrorOnly) {
+      if (!isForced || !wasKnown) {
+        log(
+          `Skipping full refresh for ${entry.version}: mirrorOnly requires a cached forced version.`,
+        );
+        continue;
+      }
+
+      try {
+        const knownVersion = knownVersions.get(entry.version) as StoredVersion;
+        const { asset, payload } = await refreshStoredChartMirror(
+          knownVersion,
+          entry.version,
+          getMirrorState,
+        );
+        const storedVersion = {
+          ...knownVersion,
+          imageValidation: asset,
+        };
+        knownVersions.set(entry.version, storedVersion);
+        processedVersionPayloads.set(entry.version, {
+          imageValidation: payload,
+        });
+        refreshedVersions.push(storedVersion);
+        log(`Stored Helm mirror check at ${asset.path}`);
+      } catch (error) {
+        log(
+          `Failed to refresh Helm mirror check for ${entry.version}: ${error instanceof Error ? error.message : "unknown error"}`,
+        );
+        console.error(
+          `[helm-sync] Failed to refresh Helm mirror check for ${entry.version}`,
+          error,
+        );
+      }
+      continue;
     }
 
     try {
@@ -1088,6 +1218,14 @@ export const syncHelmData = async (
       const imageValidationPayload = await computeImageValidation(
         entry.version,
         imageEntries,
+      );
+      const mirror = await getMirrorState();
+      imageValidationPayload.chartMirror = buildChartMirrorCheck(
+        entry.version,
+        mirror.versions,
+        CODING_HELM_REPO_URL,
+        mirror.checkTime,
+        mirror.error,
       );
       const imageValidationJson = JSON.stringify(imageValidationPayload, null, 2);
 

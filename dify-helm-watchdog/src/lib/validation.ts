@@ -1,4 +1,6 @@
 import type {
+  ChartMirrorCheck,
+  ChartMirrorStatus,
   ImageValidationPayload,
   ImageValidationRecord,
   ImageVariantCheck,
@@ -90,6 +92,22 @@ export const normalizeValidationRecord = (
   };
 };
 
+const normalizeChartMirror = (value: unknown): ChartMirrorCheck | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const v = value as Partial<ChartMirrorCheck>;
+  const raw = String(v.status ?? "").toUpperCase();
+  const status: ChartMirrorStatus =
+    raw === "FOUND" || raw === "MISSING" || raw === "ERROR"
+      ? (raw as ChartMirrorStatus)
+      : "ERROR";
+  return {
+    repoUrl: String(v.repoUrl ?? ""),
+    status,
+    checkTime: normalizeTimestamp(v.checkTime) ?? new Date().toISOString(),
+    ...(v.error ? { error: String(v.error) } : {}),
+  };
+};
+
 export const normalizeValidationPayload = (
   payload: ImageValidationPayload,
 ): ImageValidationPayload => {
@@ -107,6 +125,9 @@ export const normalizeValidationPayload = (
     images: Array.isArray(payload.images)
       ? payload.images.map((image) => normalizeValidationRecord(image))
       : [],
+    ...(payload.chartMirror
+      ? { chartMirror: normalizeChartMirror(payload.chartMirror) }
+      : {}),
   };
 };
 
