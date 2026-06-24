@@ -199,7 +199,7 @@ const parseValidationPayload = (
 
 const ensureImageTagsQuoted = (input: string): string =>
   input.replace(
-    /^(\s*tag:\s*)([^"'#\n][^#\n]*?)(\s*)(#.*)?$/gm,
+    /^(\s*(?:tag|repo|ref_type|ref|commit):\s*)([^"'#\n][^#\n]*?)(\s*)(#.*)?$/gm,
     (match, prefix, rawValue, spacing = "", comment = "") => {
       const trimmed = rawValue.trim();
       if (!trimmed || trimmed.startsWith('"') || trimmed.startsWith("'")) {
@@ -599,9 +599,12 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     }
 
     const shouldFetchValues = !hasLocalValues;
-    // Images always go through the API so the Images tab shows the same
-    // release-lock source refs the API/MCP add for >= 3.9.0 versions.
-    const shouldFetchImages = true;
+    // EE (>= 3.9.0) images go through the API to pick up release-lock source
+    // refs; older versions keep the inline / direct-R2 fast path.
+    const isEeImageVersion = Boolean(
+      semver.valid(version.version) && semver.gte(version.version, "3.9.0"),
+    );
+    const shouldFetchImages = !hasLocalImages || isEeImageVersion;
     const shouldFetchValidation =
       hasAsset && (!hasLocalValidation || isReloading);
 
@@ -638,14 +641,18 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               return response.text();
             })
             : Promise.resolve(version.values.inline ?? ""),
-          fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
-            (response) => {
-              if (!response.ok) {
-                throw new Error("Failed to download cached YAML artifacts");
-              }
-              return response.text();
-            },
-          ),
+          shouldFetchImages || isReloading
+            ? fetch(
+                isEeImageVersion
+                  ? `/api/v1/versions/${version.version}/images?format=yaml`
+                  : version.images.url,
+              ).then((response) => {
+                if (!response.ok) {
+                  throw new Error("Failed to download cached YAML artifacts");
+                }
+                return response.text();
+              })
+            : Promise.resolve(version.images.inline ?? ""),
           shouldFetchValidation
             ? fetch(validationAsset!.url).then((response) => {
               if (!response.ok) {
@@ -788,16 +795,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       return response.text();
     };
 
+    const isEeImageVersion = Boolean(
+      semver.valid(version.version) && semver.gte(version.version, "3.9.0"),
+    );
     const [valuesText, imagesText] = await Promise.all([
       resolveAsset(version.values),
-      fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
-        (response) => {
-          if (!response.ok) {
-            throw new Error("Failed to download cached YAML artifacts");
-          }
-          return response.text();
-        },
-      ),
+      isEeImageVersion
+        ? fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
+            (response) => {
+              if (!response.ok) {
+                throw new Error("Failed to download cached YAML artifacts");
+              }
+              return response.text();
+            },
+          )
+        : resolveAsset(version.images),
     ]);
 
     return {

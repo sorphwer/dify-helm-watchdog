@@ -63,7 +63,7 @@ export const TOOLS: McpToolDefinition[] = [
   {
     name: "list_images",
     description:
-      "Lists all container images declared in a Helm chart version's values.yaml. Optionally includes validation status for each image. For versions >= 3.9.0, images built from Dify source are also enriched with source refs (repo, ref, ref_type, commit) from the enterprise release lock.",
+      "Lists all container images declared in a Helm chart version's values.yaml. Optionally includes validation status for each image. For versions >= 3.9.0 the image `tag` is the release version, NOT a source commit hash; images built from Dify source are additionally enriched with the source ref they were built from (repo, ref, ref_type, commit) from the enterprise release lock — use those fields to identify the exact source code.",
     inputSchema: {
       type: "object",
       properties: {
