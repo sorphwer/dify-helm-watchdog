@@ -1,5 +1,6 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
 import { loadCache } from "@/lib/helm";
+import { supportsReleaseLock } from "@/lib/release-locks";
 import type { ImageValidationRecord, StoredVersion, VersionStatus } from "@/lib/types";
 import { countValidationStatuses } from "@/lib/validation";
 import { isSkippable } from "@/lib/version-status";
@@ -13,6 +14,9 @@ interface VersionSummary {
   digest?: string;
   status: VersionStatus | null;
   skippable: boolean;
+  releaseLock?: {
+    url: string;
+  };
   imageValidation?: {
     total: number;
     allFound: number;
@@ -119,6 +123,13 @@ export async function GET(request: Request) {
           digest: version.digest,
           status: version.status ?? null,
           skippable: isSkippable(version.status),
+          ...(supportsReleaseLock(version.version)
+            ? {
+                releaseLock: {
+                  url: `/api/v1/versions/${version.version}/release-lock`,
+                },
+              }
+            : {}),
         };
 
         if (includeValidation) {
@@ -151,4 +162,3 @@ export async function GET(request: Request) {
     });
   }
 }
-

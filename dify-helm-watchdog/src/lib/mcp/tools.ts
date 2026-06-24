@@ -8,6 +8,7 @@ import {
   ReleaseNotesError,
   fetchReleaseNotesAsMarkdown,
 } from "@/lib/release-notes";
+import { loadReleaseLock, supportsReleaseLock } from "@/lib/release-locks";
 import type { ImageValidationRecord, StoredVersion } from "@/lib/types";
 import { isSkippable } from "@/lib/version-status";
 import { countValidationStatuses, normalizeValidationPayload } from "@/lib/validation";
@@ -23,7 +24,7 @@ export const TOOLS: McpToolDefinition[] = [
   {
     name: "list_versions",
     description:
-      "Lists all available Dify Helm chart versions with optional validation statistics. Returns version numbers, app versions, creation times, and aggregated image validation counts.",
+      "Lists all available Dify Helm chart versions with optional validation statistics. Returns version numbers, app versions, creation times, aggregated image validation counts, and release-lock URLs for EE versions that support source refs.",
     inputSchema: {
       type: "object",
       properties: {
@@ -47,7 +48,7 @@ export const TOOLS: McpToolDefinition[] = [
   {
     name: "get_version_details",
     description:
-      "Returns detailed metadata for a specific Helm chart version, including chart URL, digest, and asset locations for values.yaml, images, and validation data.",
+      "Returns detailed metadata for a specific Helm chart version, including chart URL, digest, asset locations, and parsed release-lock source refs when available.",
     inputSchema: {
       type: "object",
       properties: {
@@ -186,6 +187,13 @@ const listVersions = async (
         digest: version.digest,
         status: version.status ?? null,
         skippable: isSkippable(version.status),
+        ...(supportsReleaseLock(version.version)
+          ? {
+              releaseLock: {
+                url: `/api/v1/versions/${version.version}/release-lock`,
+              },
+            }
+          : {}),
       };
 
       if (includeValidation && version.imageValidation) {
@@ -259,6 +267,13 @@ const getVersionDetails = async (
   }
 
   const { entry } = result;
+  let releaseLock = null;
+  try {
+    releaseLock = await loadReleaseLock(version);
+  } catch {
+    releaseLock = null;
+  }
+
   return jsonResult({
     version: entry.version,
     appVersion: entry.appVersion ?? null,
@@ -292,10 +307,14 @@ const getVersionDetails = async (
       self: `/api/v1/versions/${version}`,
       images: `/api/v1/versions/${version}/images`,
       values: `/api/v1/versions/${version}/values`,
+      ...(supportsReleaseLock(version)
+        ? { releaseLock: `/api/v1/versions/${version}/release-lock` }
+        : {}),
       ...(entry.imageValidation
         ? { validation: `/api/v1/versions/${version}/validation` }
         : {}),
     },
+    releaseLock,
   });
 };
 
@@ -473,4 +492,3 @@ export const executeTool = async (
       return errorResult(`Unknown tool: ${name}`);
   }
 };
-

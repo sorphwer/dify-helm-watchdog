@@ -1,6 +1,7 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
 import { isValidVersion } from "@/lib/api/guard";
 import { loadCache } from "@/lib/helm";
+import { loadReleaseLock, supportsReleaseLock } from "@/lib/release-locks";
 import { isSkippable } from "@/lib/version-status";
 
 export const runtime = "nodejs";
@@ -72,6 +73,16 @@ export async function GET(
       });
     }
 
+    let releaseLock = null;
+    try {
+      releaseLock = await loadReleaseLock(version);
+    } catch (error) {
+      console.warn(
+        `[api/v1/versions/{version}] Failed to load release lock for ${version}`,
+        error,
+      );
+    }
+
     const responseBody = {
       version: versionEntry.version,
       appVersion: versionEntry.appVersion ?? null,
@@ -105,10 +116,14 @@ export async function GET(
         self: `/api/v1/versions/${version}`,
         images: `/api/v1/versions/${version}/images`,
         values: `/api/v1/versions/${version}/values`,
+        ...(supportsReleaseLock(version)
+          ? { releaseLock: `/api/v1/versions/${version}/release-lock` }
+          : {}),
         ...(versionEntry.imageValidation
           ? { validation: `/api/v1/versions/${version}/validation` }
           : {}),
       },
+      releaseLock,
     };
 
     return createJsonResponse(responseBody, {
@@ -127,4 +142,3 @@ export async function GET(
     });
   }
 }
-

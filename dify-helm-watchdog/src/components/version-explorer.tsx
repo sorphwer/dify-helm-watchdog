@@ -29,6 +29,7 @@ import YAML from "yaml";
 import type {
   CachePayload,
   ImageValidationPayload,
+  ReleaseLockPayload,
   StoredVersion,
 } from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -271,6 +272,8 @@ interface ImageTagEntry {
 // Version status from official Dify Helm docs sidebar
 type VersionStatus = "non-skippable" | "archived" | "deprecated";
 
+const RELEASE_LOCK_MIN_VERSION = "3.9.0";
+
 // Manual status overrides, applied on top of the official sidebar. Use this
 // when a version's status isn't (yet) reflected upstream but we want it
 // surfaced in the UI regardless.
@@ -311,6 +314,15 @@ const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
   return map;
 };
 
+const isReleaseLockVersion = (version: string | null | undefined): boolean =>
+  Boolean(version && semver.valid(version) && semver.gte(version, RELEASE_LOCK_MIN_VERSION));
+
+const shortCommit = (commit?: string): string =>
+  commit ? commit.slice(0, 12) : "unknown";
+
+const repoLabel = (repo?: string): string =>
+  repo?.replace(/\.git$/, "").split("/").pop() ?? "source";
+
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const { resolvedTheme } = useTheme();
   const searchParams = useSearchParams();
@@ -342,6 +354,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const [detailsMode, setDetailsMode] = useState<"markdown" | "html">(
     "markdown",
   );
+  const [releaseLock, setReleaseLock] = useState<ReleaseLockPayload | null>(null);
+  const [releaseLockStatus, setReleaseLockStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [releaseLockError, setReleaseLockError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadFlag, setReloadFlag] = useState(0);
@@ -540,6 +557,45 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     return () => controller.abort();
   }, [selectedVersion, detailsReloadKey]);
 
+  useEffect(() => {
+    if (
+      !selectedVersion ||
+      activeArtifact !== "details" ||
+      !isReleaseLockVersion(selectedVersion)
+    ) {
+      setReleaseLock(null);
+      setReleaseLockStatus("idle");
+      setReleaseLockError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setReleaseLock(null);
+    setReleaseLockStatus("loading");
+    setReleaseLockError(null);
+
+    fetch(`/api/v1/versions/${selectedVersion}/release-lock`, {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json() as Promise<ReleaseLockPayload>;
+      })
+      .then((payload) => {
+        setReleaseLock(payload);
+        setReleaseLockStatus("success");
+      })
+      .catch((thrown) => {
+        if (thrown instanceof Error && thrown.name === "AbortError") return;
+        setReleaseLock(null);
+        setReleaseLockStatus("error");
+        setReleaseLockError("Failed to load release sources.");
+      });
+
+    return () => controller.abort();
+  }, [selectedVersion, activeArtifact]);
+
   // Wizard handlers
   const handleOpenWizard = useCallback(() => {
     setWizardOpen(true);
@@ -629,7 +685,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
         const [valuesText, imagesText, validationText] = await Promise.all([
           shouldFetchValues || isReloading
-            ? fetch(version.values.url).then((response) => {
+            ? fetch(`/api/v1/versions/${version.version}/values`).then((response) => {
               if (!response.ok) {
                 throw new Error("Failed to download cached YAML artifacts");
               }
@@ -637,7 +693,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             })
             : Promise.resolve(version.values.inline ?? ""),
           shouldFetchImages || isReloading
-            ? fetch(version.images.url).then((response) => {
+            ? fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then((response) => {
               if (!response.ok) {
                 throw new Error("Failed to download cached YAML artifacts");
               }
@@ -645,7 +701,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             })
             : Promise.resolve(version.images.inline ?? ""),
           shouldFetchValidation
-            ? fetch(validationAsset!.url).then((response) => {
+            ? fetch(`/api/v1/versions/${version.version}/validation`).then((response) => {
               if (!response.ok) {
                 throw new Error("Failed to download image validation payload");
               }
@@ -775,11 +831,14 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   );
 
   const loadVersionArtifacts = async (version: StoredVersion) => {
-    const resolveAsset = async (asset: StoredVersion["values"]) => {
+    const resolveAsset = async (
+      asset: StoredVersion["values"],
+      url: string,
+    ) => {
       if (typeof asset.inline === "string") {
         return asset.inline;
       }
-      const response = await fetch(asset.url);
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error("Failed to download cached YAML artifacts");
       }
@@ -787,8 +846,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     };
 
     const [valuesText, imagesText] = await Promise.all([
-      resolveAsset(version.values),
-      resolveAsset(version.images),
+      resolveAsset(version.values, `/api/v1/versions/${version.version}/values`),
+      resolveAsset(
+        version.images,
+        `/api/v1/versions/${version.version}/images?format=yaml`,
+      ),
     ]);
 
     return {
@@ -892,101 +954,179 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   const lastSync = formatDateParts(data?.updateTime);
+  const showReleaseSources = isReleaseLockVersion(selectedVersion);
+  const releaseSourcesPanel = showReleaseSources ? (
+    <section className="shrink-0 rounded-xl border border-border bg-card/40 px-3 py-2">
+      <div className="custom-scrollbar flex items-stretch gap-2 overflow-x-auto">
+        <div className="flex min-w-[168px] shrink-0 flex-col justify-center gap-1 border-r border-border pr-3">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <FileJson className="h-3.5 w-3.5" />
+            Release sources
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="rounded-full border border-border bg-background px-2 py-0.5 font-mono text-xs text-foreground">
+              v{releaseLock?.version ?? selectedVersion}
+            </span>
+            {releaseLock?.releaseTrack ? (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#1B4DFF] dark:bg-blue-950 dark:text-blue-400">
+                {releaseLock.releaseTrack}
+              </span>
+            ) : null}
+            {typeof releaseLock?.componentCount === "number" ? (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                {releaseLock.componentCount} components
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {releaseLock ? (
+          releaseLock.sources.map((source) => (
+            <div
+              key={source.id}
+              className="flex min-w-[210px] shrink-0 flex-col justify-center rounded-lg border border-border bg-background/70 px-3 py-2"
+            >
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate text-xs font-semibold text-foreground">
+                  {source.id}
+                </span>
+                {source.refType ? (
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                    {source.refType}
+                  </span>
+                ) : null}
+                {releaseLock.componentsBySource?.[source.id] ? (
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {releaseLock.componentsBySource[source.id]}
+                  </span>
+                ) : null}
+              </div>
+              <div
+                className="mt-1 truncate font-mono text-[11px] text-muted-foreground"
+                title={source.ref}
+              >
+                {repoLabel(source.repo)} · {source.ref ?? "unknown ref"}
+              </div>
+              <div
+                className="mt-1 truncate font-mono text-[11px] text-primary"
+                title={source.commit}
+              >
+                {shortCommit(source.commit)}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="flex min-h-[58px] items-center gap-2 text-sm text-muted-foreground">
+            {releaseLockStatus === "loading" ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+            )}
+            <span>
+              {releaseLockStatus === "loading"
+                ? "Loading release sources..."
+                : releaseLockError ?? "Release lock not synced yet."}
+            </span>
+          </div>
+        )}
+      </div>
+    </section>
+  ) : null;
 
   return (
-    <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
-      <header className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="mt-[17px] ml-[17px] flex-1">
+    <div className="flex h-full w-full flex-col gap-3 overflow-hidden">
+      <header className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex-1">
           <BrandLockup />
         </div>
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-2">
           <button
             type="button"
             onClick={() => setLogsModalOpen(true)}
-            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+            className="group flex min-h-[52px] items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:bg-accent/10"
           >
             <div className="flex flex-col items-start leading-tight">
               <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                 <CalendarClock className="h-3.5 w-3.5 shrink-0" />
                 Last sync
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap text-left">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap text-left">
                 {lastSync.date}
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap text-left">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap text-left">
                 {lastSync.time || "\u00A0"}
               </span>
             </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
-              <ScrollText className="h-5 w-5" />
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ScrollText className="h-4 w-4" />
             </span>
           </button>
 
           <Link
             href="/swagger"
-            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+            className="group flex min-h-[52px] items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:bg-accent/10"
           >
             <div className="flex flex-col leading-tight">
               <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                 <BookOpenText className="h-3.5 w-3.5 shrink-0" />
                 Docs
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
                 Swagger
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
                 UI
               </span>
             </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
-              <ArrowUpRight className="h-5 w-5" />
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ArrowUpRight className="h-4 w-4" />
             </span>
           </Link>
 
           <Link
             href="/openapi.json"
-            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+            className="group flex min-h-[52px] items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:bg-accent/10"
           >
             <div className="flex flex-col leading-tight">
               <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                 <FileJson className="h-3.5 w-3.5 shrink-0" />
                 Spec
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
                 OpenAPI
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
                 JSON
               </span>
             </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
-              <ArrowUpRight className="h-5 w-5" />
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ArrowUpRight className="h-4 w-4" />
             </span>
           </Link>
 
           <button
             type="button"
             onClick={() => setMcpModalOpen(true)}
-            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+            className="group flex min-h-[52px] items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:bg-accent/10"
           >
             <div className="flex flex-col leading-tight text-left">
               <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                 <Settings2 className="h-3.5 w-3.5 shrink-0" />
                 Connect
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
                 MCP
               </span>
-              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
                 Server
               </span>
             </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
-              <Copy className="h-5 w-5" />
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <Copy className="h-4 w-4" />
             </span>
           </button>
 
-          <div className="flex min-h-[64px] items-center justify-center rounded-xl border border-border bg-card px-3 py-3">
+          <div className="flex min-h-[52px] items-center justify-center rounded-xl border border-border bg-card px-2 py-2">
             <ThemeToggle />
           </div>
         </div>
@@ -1360,17 +1500,20 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                   />
                 ) : activeTab.type === "markdown" ? (
                   detailsStatus === "success" ? (
-                    detailsMode === "html" ? (
-                      <div
-                        className="ee-release-notes custom-scrollbar h-full w-full overflow-auto rounded-2xl border border-border bg-card/30 px-2 py-4"
-                        dangerouslySetInnerHTML={{ __html: detailsHtml }}
-                      />
-                    ) : (
-                      <MarkdownRenderer
-                        content={detailsContent}
-                        className="h-full w-full"
-                      />
-                    )
+                    <div className="flex h-full min-h-0 flex-col gap-3">
+                      {releaseSourcesPanel}
+                      {detailsMode === "html" ? (
+                        <div
+                          className="ee-release-notes custom-scrollbar min-h-0 flex-1 overflow-auto rounded-2xl border border-border bg-card/30 px-2 py-4"
+                          dangerouslySetInnerHTML={{ __html: detailsHtml }}
+                        />
+                      ) : (
+                        <MarkdownRenderer
+                          content={detailsContent}
+                          className="min-h-0 flex-1"
+                        />
+                      )}
+                    </div>
                   ) : detailsStatus === "loading" || detailsStatus === "idle" ? (
                     <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card/30">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">

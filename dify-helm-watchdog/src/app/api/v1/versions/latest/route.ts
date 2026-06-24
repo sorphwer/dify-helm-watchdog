@@ -1,5 +1,6 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
 import { loadCache } from "@/lib/helm";
+import { supportsReleaseLock } from "@/lib/release-locks";
 import { isSkippable } from "@/lib/version-status";
 
 export const runtime = "nodejs";
@@ -70,6 +71,9 @@ export async function GET(request: Request) {
         self: `/api/v1/versions/${latestVersion.version}`,
         images: `/api/v1/versions/${latestVersion.version}/images`,
         values: `/api/v1/versions/${latestVersion.version}/values`,
+        ...(supportsReleaseLock(latestVersion.version)
+          ? { releaseLock: `/api/v1/versions/${latestVersion.version}/release-lock` }
+          : {}),
         ...(latestVersion.imageValidation
           ? { validation: `/api/v1/versions/${latestVersion.version}/validation` }
           : {}),
@@ -92,4 +96,3 @@ export async function GET(request: Request) {
     });
   }
 }
-

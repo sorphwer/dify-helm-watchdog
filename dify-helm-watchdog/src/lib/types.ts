@@ -34,6 +34,22 @@ export interface CachePayload {
   versions: StoredVersion[];
 }
 
+export interface ReleaseLockSource {
+  id: string;
+  repo?: string;
+  ref?: string;
+  refType?: string;
+  commit?: string;
+}
+
+export interface ReleaseLockPayload {
+  version?: string;
+  releaseTrack?: string;
+  componentCount?: number;
+  componentsBySource?: Record<string, number>;
+  sources: ReleaseLockSource[];
+}
+
 export type ImageVariantName = "ORIGINAL" | "AMD64" | "ARM64";
 
 export type ImageVariantStatus = "FOUND" | "MISSING" | "ERROR";
