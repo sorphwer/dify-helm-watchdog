@@ -367,6 +367,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const detailsCacheRef = useRef<
     Map<string, { mode: "markdown" | "html"; content: string }>
   >(new Map());
+  const imagesCacheRef = useRef<Map<string, string>>(new Map());
 
   // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -569,6 +570,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     const isReloading =
       reloadTarget === selectedVersion && reloadFlag > processedReload;
 
+    const cachedImages = isReloading
+      ? undefined
+      : imagesCacheRef.current.get(selectedVersion);
+
     const hasLocalValues = typeof version.values.inline === "string";
     const hasLocalImages = typeof version.images.inline === "string";
     const validationAsset = version.imageValidation;
@@ -580,7 +585,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
     setValuesContent(hasLocalValues ? version.values.inline ?? "" : "");
     setImagesContent(
-      hasLocalImages ? ensureImageTagsQuoted(version.images.inline ?? "") : "",
+      cachedImages ??
+        (hasLocalImages
+          ? ensureImageTagsQuoted(version.images.inline ?? "")
+          : ""),
     );
 
     if (hasLocalValidation) {
@@ -604,7 +612,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     const isEeImageVersion = Boolean(
       semver.valid(version.version) && semver.gte(version.version, "3.9.0"),
     );
-    const shouldFetchImages = !hasLocalImages || isEeImageVersion;
+    const shouldFetchImages =
+      !cachedImages && (!hasLocalImages || isEeImageVersion);
     const shouldFetchValidation =
       hasAsset && (!hasLocalValidation || isReloading);
 
@@ -652,7 +661,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                 }
                 return response.text();
               })
-            : Promise.resolve(version.images.inline ?? ""),
+            : Promise.resolve(cachedImages ?? version.images.inline ?? ""),
           shouldFetchValidation
             ? fetch(validationAsset!.url).then((response) => {
               if (!response.ok) {
@@ -669,7 +678,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
         if (!cancelled) {
           setValuesContent(valuesText);
-          setImagesContent(ensureImageTagsQuoted(imagesText));
+          const quotedImages = ensureImageTagsQuoted(imagesText);
+          setImagesContent(quotedImages);
+          if (shouldFetchImages || isReloading) {
+            imagesCacheRef.current.set(selectedVersion, quotedImages);
+          }
 
           if (hasAsset) {
             const { payload, error: parsedError } = parseValidationPayload(
