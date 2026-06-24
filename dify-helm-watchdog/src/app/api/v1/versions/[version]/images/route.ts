@@ -3,6 +3,7 @@ import { isValidVersion } from "@/lib/api/guard";
 import { loadCache } from "@/lib/helm";
 import type { ImageValidationRecord } from "@/lib/types";
 import { normalizeValidationRecord } from "@/lib/validation";
+import { loadImageSourceRefs, supportsReleaseLock, type ImageSourceRef } from "@/lib/release-locks";
 import YAML from "yaml";
 
 export const runtime = "nodejs";
@@ -14,6 +15,10 @@ interface ImageInfo {
 
 interface ImageEntry extends ImageInfo {
   path: string;
+  repo?: string;
+  ref?: string;
+  ref_type?: string;
+  commit?: string;
   targetImageName?: string;
   validation?: {
     status: ImageValidationRecord["status"];
@@ -33,7 +38,7 @@ interface ImagesResponse {
  * /api/v1/versions/{version}/images:
  *   get:
  *     summary: List images declared by a chart version
- *     description: Returns container image references extracted from the Helm chart values file, optionally enriched with validation results.
+ *     description: Returns container image references extracted from the Helm chart values file, optionally enriched with validation results. For versions >= 3.9.0, images built from Dify source also include source refs (repo, ref, ref_type, commit) from the enterprise release lock.
  *     tags:
  *       - Images
  *     parameters:
@@ -122,6 +127,18 @@ export async function GET(
 
     const imagesData = YAML.parse(imagesText) as Record<string, ImageInfo>;
 
+    let sourceRefs = new Map<string, ImageSourceRef>();
+    if (supportsReleaseLock(version)) {
+      try {
+        sourceRefs = await loadImageSourceRefs(version);
+      } catch (error) {
+        console.warn(
+          `[api/v1/versions/images] Failed to load release lock for ${version}`,
+          error,
+        );
+      }
+    }
+
     let validationData: Record<string, ImageValidationRecord> | null = null;
     if (includeValidation && versionEntry.imageValidation) {
       try {
@@ -158,6 +175,14 @@ export async function GET(
         tag: info.tag,
       };
 
+      const sourceRef = sourceRefs.get(info.repository);
+      if (sourceRef) {
+        if (sourceRef.repo) entry.repo = sourceRef.repo;
+        if (sourceRef.ref) entry.ref = sourceRef.ref;
+        if (sourceRef.ref_type) entry.ref_type = sourceRef.ref_type;
+        if (sourceRef.commit) entry.commit = sourceRef.commit;
+      }
+
       if (validationData) {
         const key = `${info.repository}:${info.tag}`;
         const validation = validationData[key];
@@ -177,6 +202,10 @@ export async function GET(
       type YamlEntry = {
         repository: string;
         tag: string;
+        repo?: string;
+        ref?: string;
+        ref_type?: string;
+        commit?: string;
         targetImageName?: string;
         validation?: ImageEntry["validation"];
       };
@@ -186,6 +215,10 @@ export async function GET(
           acc[img.path] = {
             repository: img.repository,
             tag: img.tag,
+            ...(img.repo ? { repo: img.repo } : {}),
+            ...(img.ref ? { ref: img.ref } : {}),
+            ...(img.ref_type ? { ref_type: img.ref_type } : {}),
+            ...(img.commit ? { commit: img.commit } : {}),
             ...(img.targetImageName ? { targetImageName: img.targetImageName } : {}),
             ...(img.validation ? { validation: img.validation } : {}),
           };

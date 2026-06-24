@@ -599,7 +599,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     }
 
     const shouldFetchValues = !hasLocalValues;
-    const shouldFetchImages = !hasLocalImages;
+    // Images always go through the API so the Images tab shows the same
+    // release-lock source refs the API/MCP add for >= 3.9.0 versions.
+    const shouldFetchImages = true;
     const shouldFetchValidation =
       hasAsset && (!hasLocalValidation || isReloading);
 
@@ -636,14 +638,14 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               return response.text();
             })
             : Promise.resolve(version.values.inline ?? ""),
-          shouldFetchImages || isReloading
-            ? fetch(version.images.url).then((response) => {
+          fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
+            (response) => {
               if (!response.ok) {
                 throw new Error("Failed to download cached YAML artifacts");
               }
               return response.text();
-            })
-            : Promise.resolve(version.images.inline ?? ""),
+            },
+          ),
           shouldFetchValidation
             ? fetch(validationAsset!.url).then((response) => {
               if (!response.ok) {
@@ -788,7 +790,14 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
     const [valuesText, imagesText] = await Promise.all([
       resolveAsset(version.values),
-      resolveAsset(version.images),
+      fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
+        (response) => {
+          if (!response.ok) {
+            throw new Error("Failed to download cached YAML artifacts");
+          }
+          return response.text();
+        },
+      ),
     ]);
 
     return {
