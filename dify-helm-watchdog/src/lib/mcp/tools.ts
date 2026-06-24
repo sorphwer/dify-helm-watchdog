@@ -11,6 +11,7 @@ import {
 import type { ImageValidationRecord, StoredVersion } from "@/lib/types";
 import { isSkippable } from "@/lib/version-status";
 import { countValidationStatuses, normalizeValidationPayload } from "@/lib/validation";
+import { loadImageSourceRefs, supportsReleaseLock, type ImageSourceRef } from "@/lib/release-locks";
 import YAML from "yaml";
 import type {
   McpToolDefinition,
@@ -62,7 +63,7 @@ export const TOOLS: McpToolDefinition[] = [
   {
     name: "list_images",
     description:
-      "Lists all container images declared in a Helm chart version's values.yaml. Optionally includes validation status for each image.",
+      "Lists all container images declared in a Helm chart version's values.yaml. Optionally includes validation status for each image. For versions >= 3.9.0 the image `tag` is the release version, NOT a source commit hash; images built from Dify source are additionally enriched with the source ref they were built from (repo, ref, ref_type, commit) from the enterprise release lock — use those fields to identify the exact source code.",
     inputSchema: {
       type: "object",
       properties: {
@@ -333,6 +334,15 @@ const listImages = async (
 
   const imagesData = YAML.parse(imagesText) as Record<string, ImageInfo>;
 
+  let sourceRefs = new Map<string, ImageSourceRef>();
+  if (supportsReleaseLock(version)) {
+    try {
+      sourceRefs = await loadImageSourceRefs(version);
+    } catch {
+      // Degrade gracefully: omit source refs if the lock cannot be loaded.
+    }
+  }
+
   // Load validation data if requested
   let validationData: Record<string, ImageValidationRecord> | null = null;
   if (includeValidation && entry.imageValidation) {
@@ -365,6 +375,14 @@ const listImages = async (
       repository: info.repository,
       tag: info.tag,
     };
+
+    const sourceRef = sourceRefs.get(info.repository);
+    if (sourceRef) {
+      if (sourceRef.repo) entry.repo = sourceRef.repo;
+      if (sourceRef.ref) entry.ref = sourceRef.ref;
+      if (sourceRef.ref_type) entry.ref_type = sourceRef.ref_type;
+      if (sourceRef.commit) entry.commit = sourceRef.commit;
+    }
 
     if (validationData) {
       const key = `${info.repository}:${info.tag}`;

@@ -2,6 +2,7 @@
  * MCP Prompts implementation
  * Provides reusable prompt templates for common operations
  */
+import { supportsReleaseLock } from "@/lib/release-locks";
 
 export interface McpPromptArgument {
   name: string;
@@ -62,21 +63,18 @@ export const PROMPTS: McpPromptDefinition[] = [
 
 // Prompt template generators
 const generateUpdateEnterprisePrompt = (version: string): McpGetPromptResult => {
-  const promptText = `# Dify Enterprise Code Update Guide
+  const step2 = supportsReleaseLock(version)
+    ? `### Step 2: Read each service's source ref from the release lock
 
-## Target Version: ${version}
+For versions >= 3.9.0 the image \`tag\` is the **release version** (e.g. \`${version}\`) and is **no longer a source commit hash**. Instead, \`list_images\` enriches every image built from Dify source with the exact source ref it was built from (read from the enterprise release lock):
 
-You need to update the Dify Enterprise codebase to match Helm chart version **${version}**. Follow these steps:
+- \`repo\` — source repository URL (e.g. \`https://github.com/langgenius/dify.git\`)
+- \`ref\` — the branch or commit the build was cut from
+- \`ref_type\` — \`"branch"\` or \`"commit"\`
+- \`commit\` — the exact source commit SHA to check out
 
-### Step 1: Retrieve Image Information
-
-First, use the \`list_images\` tool to get all container images for version ${version}:
-
-\`\`\`
-Call: list_images with arguments: { "version": "${version}", "includeValidation": true }
-\`\`\`
-
-### Step 2: Identify Service Tags
+**Action**: For each image, checkout \`commit\` from its \`repo\` (\`git checkout <commit>\`). Use \`ref\`/\`ref_type\` for human-readable context. Third-party images (redis, qdrant, ssrfProxy, unstructured, ...) carry no source ref — skip them.`
+    : `### Step 2: Identify Service Tags
 
 The image tags in the Helm chart correspond to different code references depending on the service:
 
@@ -93,7 +91,23 @@ The image tags in the Helm chart correspond to different code references dependi
 #### Other Services (web, worker, etc.)
 - Check if the tag is a commit SHA or release tag
 - For SHA tags: find and checkout the commit
-- For version tags: checkout the corresponding release
+- For version tags: checkout the corresponding release`;
+
+  const promptText = `# Dify Enterprise Code Update Guide
+
+## Target Version: ${version}
+
+You need to update the Dify Enterprise codebase to match Helm chart version **${version}**. Follow these steps:
+
+### Step 1: Retrieve Image Information
+
+First, use the \`list_images\` tool to get all container images for version ${version}:
+
+\`\`\`
+Call: list_images with arguments: { "version": "${version}", "includeValidation": true }
+\`\`\`
+
+${step2}
 
 ### Step 3: Verify Alignment
 

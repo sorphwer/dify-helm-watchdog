@@ -199,7 +199,7 @@ const parseValidationPayload = (
 
 const ensureImageTagsQuoted = (input: string): string =>
   input.replace(
-    /^(\s*tag:\s*)([^"'#\n][^#\n]*?)(\s*)(#.*)?$/gm,
+    /^(\s*(?:tag|repo|ref_type|ref|commit):\s*)([^"'#\n][^#\n]*?)(\s*)(#.*)?$/gm,
     (match, prefix, rawValue, spacing = "", comment = "") => {
       const trimmed = rawValue.trim();
       if (!trimmed || trimmed.startsWith('"') || trimmed.startsWith("'")) {
@@ -367,6 +367,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   const detailsCacheRef = useRef<
     Map<string, { mode: "markdown" | "html"; content: string }>
   >(new Map());
+  const imagesCacheRef = useRef<Map<string, string>>(new Map());
 
   // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -569,6 +570,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     const isReloading =
       reloadTarget === selectedVersion && reloadFlag > processedReload;
 
+    const cachedImages = isReloading
+      ? undefined
+      : imagesCacheRef.current.get(selectedVersion);
+
     const hasLocalValues = typeof version.values.inline === "string";
     const hasLocalImages = typeof version.images.inline === "string";
     const validationAsset = version.imageValidation;
@@ -580,7 +585,10 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
     setValuesContent(hasLocalValues ? version.values.inline ?? "" : "");
     setImagesContent(
-      hasLocalImages ? ensureImageTagsQuoted(version.images.inline ?? "") : "",
+      cachedImages ??
+        (hasLocalImages
+          ? ensureImageTagsQuoted(version.images.inline ?? "")
+          : ""),
     );
 
     if (hasLocalValidation) {
@@ -599,7 +607,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     }
 
     const shouldFetchValues = !hasLocalValues;
-    const shouldFetchImages = !hasLocalImages;
+    // EE (>= 3.9.0) images go through the API to pick up release-lock source
+    // refs; older versions keep the inline / direct-R2 fast path.
+    const isEeImageVersion = Boolean(
+      semver.valid(version.version) && semver.gte(version.version, "3.9.0"),
+    );
+    const shouldFetchImages =
+      !cachedImages && (!hasLocalImages || isEeImageVersion);
     const shouldFetchValidation =
       hasAsset && (!hasLocalValidation || isReloading);
 
@@ -637,13 +651,17 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             })
             : Promise.resolve(version.values.inline ?? ""),
           shouldFetchImages || isReloading
-            ? fetch(version.images.url).then((response) => {
-              if (!response.ok) {
-                throw new Error("Failed to download cached YAML artifacts");
-              }
-              return response.text();
-            })
-            : Promise.resolve(version.images.inline ?? ""),
+            ? fetch(
+                isEeImageVersion
+                  ? `/api/v1/versions/${version.version}/images?format=yaml`
+                  : version.images.url,
+              ).then((response) => {
+                if (!response.ok) {
+                  throw new Error("Failed to download cached YAML artifacts");
+                }
+                return response.text();
+              })
+            : Promise.resolve(cachedImages ?? version.images.inline ?? ""),
           shouldFetchValidation
             ? fetch(validationAsset!.url).then((response) => {
               if (!response.ok) {
@@ -660,7 +678,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
         if (!cancelled) {
           setValuesContent(valuesText);
-          setImagesContent(ensureImageTagsQuoted(imagesText));
+          const quotedImages = ensureImageTagsQuoted(imagesText);
+          setImagesContent(quotedImages);
+          if (shouldFetchImages || isReloading) {
+            imagesCacheRef.current.set(selectedVersion, quotedImages);
+          }
 
           if (hasAsset) {
             const { payload, error: parsedError } = parseValidationPayload(
@@ -786,9 +808,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       return response.text();
     };
 
+    const isEeImageVersion = Boolean(
+      semver.valid(version.version) && semver.gte(version.version, "3.9.0"),
+    );
     const [valuesText, imagesText] = await Promise.all([
       resolveAsset(version.values),
-      resolveAsset(version.images),
+      isEeImageVersion
+        ? fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
+            (response) => {
+              if (!response.ok) {
+                throw new Error("Failed to download cached YAML artifacts");
+              }
+              return response.text();
+            },
+          )
+        : resolveAsset(version.images),
     ]);
 
     return {
