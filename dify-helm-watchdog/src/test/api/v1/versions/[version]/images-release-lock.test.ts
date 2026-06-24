@@ -166,4 +166,26 @@ describe("GET /api/v1/versions/{version}/images — release-lock enrichment", ()
     expect(api?.repository).toBe("langgenius/dify-ee-api");
     expect(api?.commit).toBeUndefined();
   });
+
+  it("falls back to plain repository/tag when the lock file is gone from R2 (404)", async () => {
+    mockedLoadCache.mockResolvedValue(cacheWith396());
+    serveLock({ ok: false, status: 404 });
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/versions/3.9.6/images?format=json"),
+      { params: Promise.resolve({ version: "3.9.6" }) },
+    );
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as { images: ImageEntry[] };
+    expect(body.images.length).toBeGreaterThan(0);
+    for (const image of body.images) {
+      expect(image.repository).toBeTruthy();
+      expect(image.tag).toBeTruthy();
+      expect(image.repo).toBeUndefined();
+      expect(image.ref).toBeUndefined();
+      expect(image.ref_type).toBeUndefined();
+      expect(image.commit).toBeUndefined();
+    }
+  });
 });
