@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { GithubStarPopup } from "@/components/github-star-popup";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -63,6 +64,7 @@ export default function RootLayout({
           <div className="mx-auto h-screen w-full px-4 py-6 md:px-6 lg:px-8">
             {children}
           </div>
+          <GithubStarPopup />
         </ThemeProvider>
       </body>
     </html>
