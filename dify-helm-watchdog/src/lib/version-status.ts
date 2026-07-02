@@ -7,6 +7,7 @@ const SIDEBAR_URL = "https://langgenius.github.io/dify-helm/_sidebar.md";
 // surfaced regardless. Manual entries always win over the parsed sidebar.
 export const MANUAL_VERSION_STATUS: ReadonlyMap<string, VersionStatus> = new Map([
   ["3.10.0", "non-skippable"],
+  ["3.11.0", "non-skippable"],
 ]);
 
 // Parse the official Dify Helm docs sidebar markdown into a version -> status

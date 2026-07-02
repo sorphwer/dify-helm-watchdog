@@ -276,11 +276,12 @@ type VersionStatus = "non-skippable" | "archived" | "deprecated";
 // surfaced in the UI regardless.
 const MANUAL_VERSION_STATUS: ReadonlyMap<string, VersionStatus> = new Map([
   ["3.10.0", "non-skippable"],
+  ["3.11.0", "non-skippable"],
 ]);
 
 // Versions explicitly excluded from the LTS badge, even though they'd
 // otherwise match the version-range rule for LTS.
-const MANUAL_NON_LTS: ReadonlySet<string> = new Set(["3.10.0"]);
+const MANUAL_NON_LTS: ReadonlySet<string> = new Set(["3.10.0", "3.11.0"]);
 
 const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
   const map = new Map<string, VersionStatus>();
