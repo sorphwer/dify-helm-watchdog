@@ -1,4 +1,8 @@
+import sanitizeHtml from "sanitize-html";
+
 export const RELEASE_FEED_URL = "https://ee.dify.ai/releases/feed.json";
+
+const EE_ORIGIN = "https://ee.dify.ai";
 
 export interface ReleaseFeedEntry {
   version: string;
@@ -13,11 +17,21 @@ export interface ReleaseFeedEntry {
 const VERSION_FROM_RELEASE_URL =
   /\/releases\/v(\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.]+)?)\/?$/;
 
+// The release feed is an untrusted source. Restrict the summary to a small
+// allowlist of formatting tags and safe link attributes/schemes so no markup
+// from the feed can inject script, event handlers, or dangerous URLs into any
+// consumer (client render, feed-fallback API, MCP turndown).
+const FEED_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "p", "br", "strong", "em", "b", "i", "code", "pre",
+    "ul", "ol", "li", "a", "h2", "h3", "h4", "span", "blockquote",
+  ],
+  allowedAttributes: { a: ["href", "target", "rel"] },
+  allowedSchemes: ["http", "https", "mailto"],
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const stripScripts = (html: string): string =>
-  html.replace(/<script[\s\S]*?<\/script\s*>/gi, "");
 
 const asString = (value: unknown): string =>
   typeof value === "string" ? value : "";
@@ -52,20 +66,24 @@ export const parseReleaseFeed = (
   for (const item of payload.items) {
     if (!isRecord(item)) continue;
 
-    const rawUrl = asString(item.url);
-    const rawId = asString(item.id);
-    const versionSource = rawUrl || rawId;
-    const versionMatch = versionSource.match(VERSION_FROM_RELEASE_URL);
+    // Derive the version from whichever of url/id yields a valid match, so a
+    // hostile or malformed url can't block recovery from a valid id.
+    const versionMatch =
+      asString(item.url).match(VERSION_FROM_RELEASE_URL) ??
+      asString(item.id).match(VERSION_FROM_RELEASE_URL);
     if (!versionMatch) continue;
 
     const summarySource = asString(item.content_html) || asString(item.summary);
     const tags = Array.isArray(item.tags) ? item.tags : [];
-    const summaryHtml = stripScripts(summarySource);
+    // Sanitize against the untrusted feed (see FEED_SANITIZE_OPTIONS).
+    const summaryHtml = sanitizeHtml(summarySource, FEED_SANITIZE_OPTIONS);
 
     map.set(versionMatch[1], {
       version: versionMatch[1],
       title: asString(item.title),
-      url: rawUrl,
+      // Derive the link from the validated version instead of trusting the
+      // feed's url field, so it can never carry a javascript:/off-origin URL.
+      url: `${EE_ORIGIN}/releases/v${versionMatch[1]}`,
       lts: tags.includes("LTS"),
       nonSkippable: /must not be skipped/i.test(summarySource),
       summaryHtml,
