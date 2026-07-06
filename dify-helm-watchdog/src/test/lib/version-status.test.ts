@@ -2,7 +2,6 @@ import {
   parseSidebarMd,
   fetchVersionStatusMap,
   isSkippable,
-  MANUAL_VERSION_STATUS,
 } from "@/lib/version-status";
 
 const SAMPLE_SIDEBAR = `* [v3.10.0](/pages/3_10_0.md)
@@ -13,6 +12,71 @@ const SAMPLE_SIDEBAR = `* [v3.10.0](/pages/3_10_0.md)
 * [v2.4.0-fix.1](/pages/2_4_0-fix_1.md)
 * not a version line
 `;
+
+const RELEASE_FEED_PAYLOAD = {
+  items: [
+    {
+      title: "Release v3.9.6 (LTS)",
+      url: "https://ee.dify.ai/releases/v3.9.6",
+      tags: ["LTS", "Breaking"],
+      content_html: "<ul><li>LTS release can be skipped.</li></ul>",
+      date_modified: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      title: "Release v3.10.0 (Regular)",
+      url: "https://ee.dify.ai/releases/v3.10.0",
+      tags: ["Regular", "Breaking"],
+      content_html:
+        "<ul><li>This release must not be skipped.</li></ul><script>alert(1)</script>",
+      date_modified: "2026-02-01T00:00:00.000Z",
+    },
+  ],
+};
+
+const mockStatusFetch = ({
+  sidebarOk,
+  feedOk,
+}: {
+  sidebarOk: boolean;
+  feedOk: boolean;
+}): jest.Mock => {
+  const fetchMock = jest.fn(async (url: string | URL | Request) => {
+    const href = String(url);
+
+    if (href.includes("_sidebar.md")) {
+      if (!sidebarOk) {
+        return {
+          ok: false,
+          status: 503,
+          text: async () => "",
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () => SAMPLE_SIDEBAR,
+      };
+    }
+
+    if (href.includes("feed.json")) {
+      if (!feedOk) {
+        throw new Error("feed unavailable");
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => RELEASE_FEED_PAYLOAD,
+      };
+    }
+
+    throw new Error(`Unexpected fetch URL: ${href}`);
+  });
+
+  global.fetch = fetchMock as unknown as typeof fetch;
+  return fetchMock;
+};
 
 describe("parseSidebarMd", () => {
   it("maps each emoji to the right status", () => {
@@ -26,16 +90,9 @@ describe("parseSidebarMd", () => {
   it("leaves unmarked versions without a status", () => {
     const map = parseSidebarMd(SAMPLE_SIDEBAR);
 
+    expect(map.has("3.10.0")).toBe(false);
     expect(map.has("3.9.4")).toBe(false);
     expect(map.has("2.4.0-fix.1")).toBe(false);
-  });
-
-  it("lets manual overrides win over the sidebar", () => {
-    // 3.10.0 is unmarked upstream but manually pinned to non-skippable.
-    const map = parseSidebarMd(SAMPLE_SIDEBAR);
-
-    expect(MANUAL_VERSION_STATUS.get("3.10.0")).toBe("non-skippable");
-    expect(map.get("3.10.0")).toBe("non-skippable");
   });
 });
 
@@ -55,41 +112,45 @@ describe("fetchVersionStatusMap", () => {
     global.fetch = originalFetch;
   });
 
-  it("parses a successful response", async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      text: async () => SAMPLE_SIDEBAR,
-    }) as unknown as typeof fetch;
+  it("merges sidebar statuses with feed-derived non-skippable releases", async () => {
+    mockStatusFetch({ sidebarOk: true, feedOk: true });
 
     const map = await fetchVersionStatusMap();
 
     expect(map.get("3.8.0")).toBe("non-skippable");
+    expect(map.get("3.7.2")).toBe("archived");
+    expect(map.get("2.7.1")).toBe("deprecated");
     expect(map.get("3.10.0")).toBe("non-skippable");
+    expect(map.has("3.9.6")).toBe(false);
   });
 
-  it("falls back to manual overrides when the fetch fails", async () => {
-    global.fetch = jest
-      .fn()
-      .mockRejectedValue(new Error("network down")) as unknown as typeof fetch;
-
-    const map = await fetchVersionStatusMap();
-
-    // Only the manual overrides survive; nothing from the (failed) sidebar.
-    expect(map.get("3.10.0")).toBe("non-skippable");
-    expect(map.has("3.8.0")).toBe(false);
-    expect(map.size).toBe(MANUAL_VERSION_STATUS.size);
-  });
-
-  it("falls back to manual overrides on a non-ok response", async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-      text: async () => "",
-    }) as unknown as typeof fetch;
+  it("returns only feed-derived statuses when the sidebar fetch fails", async () => {
+    mockStatusFetch({ sidebarOk: false, feedOk: true });
 
     const map = await fetchVersionStatusMap();
 
     expect(map.get("3.10.0")).toBe("non-skippable");
     expect(map.has("3.8.0")).toBe(false);
+    expect(map.has("3.9.6")).toBe(false);
+    expect(map.size).toBe(1);
+  });
+
+  it("returns only sidebar statuses when the release feed fails", async () => {
+    mockStatusFetch({ sidebarOk: true, feedOk: false });
+
+    const map = await fetchVersionStatusMap();
+
+    expect(map.get("3.8.0")).toBe("non-skippable");
+    expect(map.get("3.7.2")).toBe("archived");
+    expect(map.get("2.7.1")).toBe("deprecated");
+    expect(map.has("3.10.0")).toBe(false);
+  });
+
+  it("returns an empty map when both status sources fail", async () => {
+    mockStatusFetch({ sidebarOk: false, feedOk: false });
+
+    const map = await fetchVersionStatusMap();
+
+    expect(map.size).toBe(0);
   });
 });

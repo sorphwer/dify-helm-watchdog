@@ -1,14 +1,7 @@
+import { fetchReleaseFeedSafe } from "@/lib/release-feed";
 import type { VersionStatus } from "@/lib/types";
 
 const SIDEBAR_URL = "https://langgenius.github.io/dify-helm/_sidebar.md";
-
-// Manual status overrides, applied on top of the official sidebar. Use this
-// when a version's status isn't (yet) reflected upstream but we want it
-// surfaced regardless. Manual entries always win over the parsed sidebar.
-export const MANUAL_VERSION_STATUS: ReadonlyMap<string, VersionStatus> = new Map([
-  ["3.10.0", "non-skippable"],
-  ["3.11.0", "non-skippable"],
-]);
 
 // Parse the official Dify Helm docs sidebar markdown into a version -> status
 // map. Status is identified by the emoji each entry carries upstream.
@@ -31,39 +24,49 @@ export const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
     }
   }
 
-  // Manual overrides always win over the upstream sidebar.
-  for (const [version, status] of MANUAL_VERSION_STATUS) {
-    map.set(version, status);
-  }
-
   return map;
 };
 
-// Fetch and parse the official sidebar. On any failure, returns a map
-// containing only the manual overrides so known statuses are never lost.
+// Fetch and parse the official sidebar plus ee.dify.ai release feed. On any
+// failure, returns statuses from the sources that remain available.
 export const fetchVersionStatusMap = async (
   log: (message: string) => void = () => {},
 ): Promise<Map<string, VersionStatus>> => {
-  try {
-    const response = await fetch(SIDEBAR_URL, {
-      headers: { "User-Agent": "dify-helm-watchdog" },
-      cache: "no-store",
-    });
+  const sidebarPromise = (async () => {
+    try {
+      const response = await fetch(SIDEBAR_URL, {
+        headers: { "User-Agent": "dify-helm-watchdog" },
+        cache: "no-store",
+      });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return parseSidebarMd(await response.text());
+    } catch (error) {
+      log(
+        `Failed to fetch version status sidebar: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      );
+      return new Map<string, VersionStatus>();
     }
+  })();
 
-    const content = await response.text();
-    return parseSidebarMd(content);
-  } catch (error) {
-    log(
-      `Failed to fetch version status sidebar: ${
-        error instanceof Error ? error.message : "unknown error"
-      }`,
-    );
-    return new Map(MANUAL_VERSION_STATUS);
+  const [sidebarStatusMap, releaseFeed] = await Promise.all([
+    sidebarPromise,
+    fetchReleaseFeedSafe(log),
+  ]);
+
+  const map = new Map(sidebarStatusMap);
+  for (const entry of releaseFeed?.values() ?? []) {
+    if (entry.nonSkippable) {
+      map.set(entry.version, "non-skippable");
+    }
   }
+
+  return map;
 };
 
 // A version is skippable unless it is explicitly marked non-skippable.

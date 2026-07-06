@@ -1098,8 +1098,8 @@ export const syncHelmData = async (
   log(`Retrieved ${indexEntries.length} chart versions from index.`);
 
   // Fetch upgrade-path status (non-skippable / archived / deprecated) from the
-  // official docs sidebar. Falls back to manual overrides only if unreachable.
-  log("Fetching version status from docs sidebar...");
+  // official docs sidebar and ee.dify.ai release feed.
+  log("Fetching version status from docs sidebar and release feed...");
   const statusMap = await fetchVersionStatusMap(log);
   log(`Resolved status for ${statusMap.size} versions.`);
   
