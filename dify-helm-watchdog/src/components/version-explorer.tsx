@@ -365,9 +365,11 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   }, [sidebarStatusMap, releaseFeed]);
 
   // ee.dify.ai release HTML (scrape or feed fallback) is rendered via
-  // dangerouslySetInnerHTML; sanitize both paths at the sink.
+  // dangerouslySetInnerHTML; sanitize both paths at the sink. ADD_ATTR keeps
+  // target="_blank" (not in DOMPurify's default allowlist) so links open in
+  // a new tab as rewriteEeLinks/buildFeedFallbackHtml intend.
   const sanitizedDetailsHtml = useMemo(
-    () => DOMPurify.sanitize(detailsHtml),
+    () => DOMPurify.sanitize(detailsHtml, { ADD_ATTR: ["target"] }),
     [detailsHtml],
   );
 
