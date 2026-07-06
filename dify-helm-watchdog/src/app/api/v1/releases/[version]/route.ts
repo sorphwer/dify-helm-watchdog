@@ -14,7 +14,9 @@ const feedFallbackResponse = async (
   request: Request,
   version: string,
 ): Promise<Response | null> => {
-  const feed = await fetchReleaseFeedSafe();
+  const feed = await fetchReleaseFeedSafe((message) =>
+    console.warn("[api/v1/releases] feed fallback:", message),
+  );
   const entry = feed?.get(version);
   if (!entry) return null;
 

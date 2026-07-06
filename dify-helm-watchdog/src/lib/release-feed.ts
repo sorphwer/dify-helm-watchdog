@@ -82,6 +82,7 @@ export const fetchReleaseFeed = async (): Promise<
   const res = await fetch(RELEASE_FEED_URL, {
     headers: { "User-Agent": "dify-helm-watchdog/1.0" },
     next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(5000),
   });
 
   if (!res.ok) {

@@ -42,6 +42,7 @@ import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
 import McpConfigModal from "@/components/modals/mcp-config-modal";
 import WorkflowLogsModal from "@/components/modals/workflow-logs-modal";
 import { parseSidebarMd } from "@/lib/version-status";
+import DOMPurify from "isomorphic-dompurify";
 
 // Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
@@ -363,6 +364,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     return map;
   }, [sidebarStatusMap, releaseFeed]);
 
+  // ee.dify.ai release HTML (scrape or feed fallback) is rendered via
+  // dangerouslySetInnerHTML; sanitize both paths at the sink.
+  const sanitizedDetailsHtml = useMemo(
+    () => DOMPurify.sanitize(detailsHtml),
+    [detailsHtml],
+  );
+
   const selectVersion = useCallback((v: string) => {
     setSelectedVersion(v);
     updateUrl({ v });
@@ -436,7 +444,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
       )
       .then((data) => {
         const entries = new Map<string, ReleaseFeedItem>();
-        for (const item of data.items ?? []) {
+        for (const item of data?.items ?? []) {
           if (!isRecord(item) || typeof item.version !== "string") continue;
           entries.set(item.version, {
             version: item.version,
@@ -1408,7 +1416,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                     detailsMode === "html" ? (
                       <div
                         className="ee-release-notes custom-scrollbar h-full w-full overflow-auto rounded-2xl border border-border bg-card/30 px-2 py-4"
-                        dangerouslySetInnerHTML={{ __html: detailsHtml }}
+                        dangerouslySetInnerHTML={{ __html: sanitizedDetailsHtml }}
                       />
                     ) : (
                       <MarkdownRenderer

@@ -172,7 +172,9 @@ export const fetchReleaseNotesAsMarkdown = async (
         content: markdown,
       };
     } catch (error) {
-      const feed = await fetchReleaseFeedSafe();
+      const feed = await fetchReleaseFeedSafe((message) =>
+        console.warn("[release-notes] feed fallback:", message),
+      );
       const entry = feed?.get(version);
       if (entry) {
         return {
