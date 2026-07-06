@@ -83,7 +83,7 @@ export const TOOLS: McpToolDefinition[] = [
   {
     name: "get_version_release_notes",
     description:
-      "Returns the release notes (Details tab content) for a specific Helm chart version as Markdown. For versions >= 3.9.0 the content comes from ee.dify.ai (HTML converted to Markdown); for older versions it comes from the Dify Helm docs site (native Markdown, normalised).",
+      'Returns the release notes (Details tab content) for a specific Helm chart version as Markdown. For versions >= 3.9.0 the content comes from ee.dify.ai (HTML converted to Markdown); for older versions it comes from the Dify Helm docs site (native Markdown, normalised). If the ee.dify.ai page cannot be scraped, the content falls back to the release feed summary (source: "feed") with a link to the full notes.',
     inputSchema: {
       type: "object",
       properties: {

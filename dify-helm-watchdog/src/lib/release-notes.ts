@@ -1,5 +1,6 @@
 import semver from "semver";
 import TurndownService from "turndown";
+import { fetchReleaseFeedSafe } from "@/lib/release-feed";
 
 const EE_ORIGIN = "https://ee.dify.ai";
 const DOCS_BASE_URL = "https://langgenius.github.io/dify-helm/";
@@ -108,7 +109,7 @@ const getTurndown = (): TurndownService => {
   return turndownInstance;
 };
 
-export type ReleaseNotesSource = "ee" | "docs";
+export type ReleaseNotesSource = "ee" | "docs" | "feed";
 
 export interface ReleaseNotesResult {
   version: string;
@@ -143,31 +144,58 @@ export const fetchReleaseNotesAsMarkdown = async (
 
   if (isEeVersion(version)) {
     const sourceUrl = `${EE_ORIGIN}/releases/v${version}`;
-    const res = await fetch(sourceUrl, {
-      headers,
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) {
+
+    try {
+      const res = await fetch(sourceUrl, {
+        headers,
+        next: { revalidate: 3600 },
+      });
+      if (!res.ok) {
+        throw new ReleaseNotesError(
+          `Upstream returned HTTP ${res.status}`,
+          502,
+        );
+      }
+      const html = await res.text();
+      const sanitised = sanitizeEeReleaseHtml(html);
+      if (!sanitised) {
+        throw new ReleaseNotesError(
+          "Could not locate release notes content on upstream page",
+          502,
+        );
+      }
+      const markdown = getTurndown().turndown(sanitised);
+      return {
+        version,
+        source: "ee",
+        sourceUrl,
+        content: markdown,
+      };
+    } catch (error) {
+      const feed = await fetchReleaseFeedSafe((message) =>
+        console.warn("[release-notes] feed fallback:", message),
+      );
+      const entry = feed?.get(version);
+      if (entry) {
+        return {
+          version,
+          source: "feed",
+          sourceUrl: entry.url,
+          content: `${getTurndown().turndown(
+            entry.summaryHtml,
+          )}\n\n> Summary from the release feed; full notes: ${entry.url}`,
+        };
+      }
+
+      if (error instanceof ReleaseNotesError) {
+        throw error;
+      }
+
       throw new ReleaseNotesError(
-        `Upstream returned HTTP ${res.status}`,
+        error instanceof Error ? error.message : "Unknown error",
         502,
       );
     }
-    const html = await res.text();
-    const sanitised = sanitizeEeReleaseHtml(html);
-    if (!sanitised) {
-      throw new ReleaseNotesError(
-        "Could not locate release notes content on upstream page",
-        502,
-      );
-    }
-    const markdown = getTurndown().turndown(sanitised);
-    return {
-      version,
-      source: "ee",
-      sourceUrl,
-      content: markdown,
-    };
   }
 
   const docsVersion = version.replace(/\./g, "_");

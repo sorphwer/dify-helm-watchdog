@@ -30,6 +30,7 @@ import type {
   CachePayload,
   ImageValidationPayload,
   StoredVersion,
+  VersionStatus,
 } from "@/lib/types";
 import { CodeBlock } from "@/components/ui/code-block";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
@@ -40,6 +41,8 @@ import ValuesWizardModal from "@/components/modals/values-wizard-modal";
 import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
 import McpConfigModal from "@/components/modals/mcp-config-modal";
 import WorkflowLogsModal from "@/components/modals/workflow-logs-modal";
+import { parseSidebarMd } from "@/lib/version-status";
+import DOMPurify from "isomorphic-dompurify";
 
 // Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
@@ -268,49 +271,14 @@ interface ImageTagEntry {
   tag?: string;
 }
 
-// Version status from official Dify Helm docs sidebar
-type VersionStatus = "non-skippable" | "archived" | "deprecated";
-
-// Manual status overrides, applied on top of the official sidebar. Use this
-// when a version's status isn't (yet) reflected upstream but we want it
-// surfaced in the UI regardless.
-const MANUAL_VERSION_STATUS: ReadonlyMap<string, VersionStatus> = new Map([
-  ["3.10.0", "non-skippable"],
-  ["3.11.0", "non-skippable"],
-]);
-
-// Versions explicitly excluded from the LTS badge, even though they'd
-// otherwise match the version-range rule for LTS.
-const MANUAL_NON_LTS: ReadonlySet<string> = new Set(["3.10.0", "3.11.0"]);
-
-const parseSidebarMd = (content: string): Map<string, VersionStatus> => {
-  const map = new Map<string, VersionStatus>();
-  const lines = content.split("\n");
-
-  for (const line of lines) {
-    // Extract version number from markdown link
-    const versionMatch = line.match(/\[v([\d.]+(?:-[^\]]+)?)/);
-    if (!versionMatch) continue;
-
-    const version = versionMatch[1];
-
-    // Identify status by emoji
-    if (line.includes("⚠️")) {
-      map.set(version, "non-skippable");
-    } else if (line.includes("📦")) {
-      map.set(version, "archived");
-    } else if (line.includes("🗑️")) {
-      map.set(version, "deprecated");
-    }
-  }
-
-  // Manual overrides always win over the upstream sidebar.
-  for (const [version, status] of MANUAL_VERSION_STATUS) {
-    map.set(version, status);
-  }
-
-  return map;
-};
+interface ReleaseFeedItem {
+  version: string;
+  title: string;
+  url: string;
+  lts: boolean;
+  nonSkippable: boolean;
+  summaryHtml: string;
+}
 
 export function VersionExplorer({ data }: VersionExplorerProps) {
   const { resolvedTheme } = useTheme();
@@ -379,10 +347,30 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   // Workflow logs modal state
   const [logsModalOpen, setLogsModalOpen] = useState(false);
 
-  // Version status from official docs (fetched async); seeded with manual
-  // overrides so they show even before/without the sidebar fetch.
-  const [versionStatusMap, setVersionStatusMap] = useState<Map<string, VersionStatus>>(
-    () => new Map(MANUAL_VERSION_STATUS),
+  const [sidebarStatusMap, setSidebarStatusMap] = useState<
+    Map<string, VersionStatus>
+  >(() => new Map());
+  const [releaseFeed, setReleaseFeed] = useState<Map<string, ReleaseFeedItem>>(
+    () => new Map(),
+  );
+
+  const versionStatusMap = useMemo(() => {
+    const map = new Map(sidebarStatusMap);
+    for (const entry of releaseFeed.values()) {
+      if (entry.nonSkippable) {
+        map.set(entry.version, "non-skippable");
+      }
+    }
+    return map;
+  }, [sidebarStatusMap, releaseFeed]);
+
+  // ee.dify.ai release HTML (scrape or feed fallback) is rendered via
+  // dangerouslySetInnerHTML; sanitize both paths at the sink. ADD_ATTR keeps
+  // target="_blank" (not in DOMPurify's default allowlist) so links open in
+  // a new tab as rewriteEeLinks/buildFeedFallbackHtml intend.
+  const sanitizedDetailsHtml = useMemo(
+    () => DOMPurify.sanitize(detailsHtml, { ADD_ATTR: ["target"] }),
+    [detailsHtml],
   );
 
   const selectVersion = useCallback((v: string) => {
@@ -436,9 +424,44 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     })
       .then((res) => (res.ok ? res.text() : Promise.reject()))
       .then(parseSidebarMd)
-      .then(setVersionStatusMap)
+      .then(setSidebarStatusMap)
       .catch(() => {
-        // Silent fail - don't modify UI if request fails
+        // Silent fail - leave feed-derived status badges intact
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  // Fetch ee.dify.ai release feed through the same-origin proxy (upstream has no CORS).
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch("/api/v1/releases/feed", {
+      signal: controller.signal,
+    })
+      .then((res) =>
+        res.ok
+          ? (res.json() as Promise<{ items?: unknown[] }>)
+          : Promise.reject(),
+      )
+      .then((data) => {
+        const entries = new Map<string, ReleaseFeedItem>();
+        for (const item of data?.items ?? []) {
+          if (!isRecord(item) || typeof item.version !== "string") continue;
+          entries.set(item.version, {
+            version: item.version,
+            title: typeof item.title === "string" ? item.title : "",
+            url: typeof item.url === "string" ? item.url : "",
+            lts: item.lts === true,
+            nonSkippable: item.nonSkippable === true,
+            summaryHtml:
+              typeof item.summaryHtml === "string" ? item.summaryHtml : "",
+          });
+        }
+        setReleaseFeed(entries);
+      })
+      .catch(() => {
+        // Silent fail - badges degrade honestly when the feed is unavailable
       });
 
     return () => controller.abort();
@@ -1065,10 +1088,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                   const isActive = version.version === selectedVersion;
                   const showDiffIcon = !isActive && Boolean(selectedVersion);
                   const showWizardButton = isActive;
-                  const isLts =
-                    !MANUAL_NON_LTS.has(version.version) &&
-                    semver.valid(version.version) &&
-                    semver.gte(version.version, "3.9.0");
+                  const isLts = releaseFeed.get(version.version)?.lts ?? false;
                   return (
                     <motion.li
                       key={version.version}
@@ -1398,7 +1418,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                     detailsMode === "html" ? (
                       <div
                         className="ee-release-notes custom-scrollbar h-full w-full overflow-auto rounded-2xl border border-border bg-card/30 px-2 py-4"
-                        dangerouslySetInnerHTML={{ __html: detailsHtml }}
+                        dangerouslySetInnerHTML={{ __html: sanitizedDetailsHtml }}
                       />
                     ) : (
                       <MarkdownRenderer
