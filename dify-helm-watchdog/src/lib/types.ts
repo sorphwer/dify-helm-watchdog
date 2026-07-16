@@ -27,6 +27,9 @@ export interface StoredVersion {
   images: StoredAsset;
   imageValidation?: StoredAsset;
   status?: VersionStatus;
+  // Last known Helm chart mirror status; lets sync cheaply decide which
+  // carried-over versions need their mirror check refreshed.
+  chartMirrorStatus?: ChartMirrorStatus;
 }
 
 export interface CachePayload {

@@ -6,6 +6,8 @@ import YAML from "yaml";
 import semver from "semver";
 import type {
   CachePayload,
+  ChartMirrorCheck,
+  ChartMirrorStatus,
   HelmVersionEntry,
   ImageValidationOverallStatus,
   ImageValidationPayload,
@@ -1043,7 +1045,7 @@ const refreshStoredChartMirror = async (
     error: string | null;
     checkTime: string;
   }>,
-): Promise<{ asset: StoredAsset; payload: string }> => {
+): Promise<{ asset: StoredAsset; payload: string; check: ChartMirrorCheck }> => {
   if (!version.imageValidation) {
     throw new Error(`No image validation cache exists for ${version.version}`);
   }
@@ -1053,13 +1055,14 @@ const refreshStoredChartMirror = async (
   const validationPayload = normalizeValidationPayload(JSON.parse(rawValidation));
   const mirror = await getMirrorState();
 
-  validationPayload.chartMirror = buildChartMirrorCheck(
+  const check = buildChartMirrorCheck(
     repoVersion,
     mirror.versions,
     CODING_HELM_REPO_URL,
     mirror.checkTime,
     mirror.error,
   );
+  validationPayload.chartMirror = check;
 
   const payload = JSON.stringify(validationPayload, null, 2);
   const asset = await persistAsset(
@@ -1068,7 +1071,7 @@ const refreshStoredChartMirror = async (
     "application/json",
   );
 
-  return { asset, payload };
+  return { asset, payload, check };
 };
 
 export const syncHelmData = async (
@@ -1181,7 +1184,7 @@ export const syncHelmData = async (
 
       try {
         const knownVersion = knownVersions.get(entry.version) as StoredVersion;
-        const { asset, payload } = await refreshStoredChartMirror(
+        const { asset, payload, check } = await refreshStoredChartMirror(
           knownVersion,
           entry.version,
           getMirrorState,
@@ -1189,6 +1192,7 @@ export const syncHelmData = async (
         const storedVersion = {
           ...knownVersion,
           imageValidation: asset,
+          chartMirrorStatus: check.status,
         };
         knownVersions.set(entry.version, storedVersion);
         processedVersionPayloads.set(entry.version, {
@@ -1220,13 +1224,14 @@ export const syncHelmData = async (
         imageEntries,
       );
       const mirror = await getMirrorState();
-      imageValidationPayload.chartMirror = buildChartMirrorCheck(
+      const mirrorCheck = buildChartMirrorCheck(
         entry.version,
         mirror.versions,
         CODING_HELM_REPO_URL,
         mirror.checkTime,
         mirror.error,
       );
+      imageValidationPayload.chartMirror = mirrorCheck;
       const imageValidationJson = JSON.stringify(imageValidationPayload, null, 2);
 
       const valuesPath = `${VALUES_PREFIX}/${entry.version}.yaml`;
@@ -1261,6 +1266,7 @@ export const syncHelmData = async (
         values: valuesAsset,
         images: imagesAsset,
         imageValidation: imageValidationAsset,
+        chartMirrorStatus: mirrorCheck.status,
       };
 
       knownVersions.set(entry.version, storedVersion);
@@ -1295,6 +1301,67 @@ export const syncHelmData = async (
       log(
         `Unable to refresh version ${version}: not found in Helm repository index.`,
       );
+    }
+  }
+
+  // Re-check the Helm mirror for carried-over versions so a MISSING/ERROR
+  // status (or a version later removed from the mirror) never stays frozen
+  // in the cached validation payload. Versions already FOUND on both sides
+  // are left untouched; everything else gets a fresh check each sync.
+  const carriedOverVersions = Array.from(knownVersions.values()).filter(
+    (version) => !processedVersionPayloads.has(version.version),
+  );
+  if (carriedOverVersions.length > 0) {
+    const mirror = await getMirrorState();
+    if (mirror.versions) {
+      let recheckedCount = 0;
+      for (const version of carriedOverVersions) {
+        const expected: ChartMirrorStatus = mirror.versions.has(version.version)
+          ? "FOUND"
+          : "MISSING";
+        if (version.chartMirrorStatus === "FOUND" && expected === "FOUND") {
+          continue;
+        }
+
+        if (!version.imageValidation) {
+          knownVersions.set(version.version, {
+            ...version,
+            chartMirrorStatus: expected,
+          });
+          continue;
+        }
+
+        try {
+          const { asset, payload, check } = await refreshStoredChartMirror(
+            version,
+            version.version,
+            getMirrorState,
+          );
+          knownVersions.set(version.version, {
+            ...version,
+            imageValidation: asset,
+            chartMirrorStatus: check.status,
+          });
+          processedVersionPayloads.set(version.version, {
+            imageValidation: payload,
+          });
+          recheckedCount += 1;
+          log(
+            `Refreshed Helm mirror check for cached version ${version.version}: ${version.chartMirrorStatus ?? "UNKNOWN"} -> ${check.status}`,
+          );
+        } catch (error) {
+          log(
+            `Failed to refresh Helm mirror check for ${version.version}: ${error instanceof Error ? error.message : "unknown error"}`,
+          );
+          console.error(
+            `[helm-sync] Failed to refresh Helm mirror check for ${version.version}`,
+            error,
+          );
+        }
+      }
+      if (recheckedCount > 0) {
+        log(`Re-checked Helm mirror for ${recheckedCount} cached versions.`);
+      }
     }
   }
 
