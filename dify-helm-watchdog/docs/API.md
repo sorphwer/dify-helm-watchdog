@@ -489,6 +489,7 @@ Processes JSON-RPC 2.0 messages according to the MCP protocol.
 | `get_version_details` | Returns detailed metadata for a specific Helm chart version |
 | `list_images` | Lists all container images declared in a Helm chart version |
 | `validate_images` | Returns the image validation report for a specific Helm chart version |
+| `get_version_release_notes` | Returns the release notes (Details tab content) for a specific Helm chart version as Markdown |
 | `compute_upgrade_path` | Computes the Dify Enterprise upgrade path between two versions |
 
 **Available resources:**

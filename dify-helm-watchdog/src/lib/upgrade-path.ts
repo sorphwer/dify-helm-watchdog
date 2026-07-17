@@ -36,9 +36,18 @@ export const computeUpgradePath = (
   from: string,
   to: string,
 ): UpgradePathResult => {
+  // archived releases are deliberately kept in the path computation — parity
+  // with ee.dify.ai's own upgrade-path tool, where archived stops still gate upgrades.
+  const seen = new Set<string>();
   const sorted = [...releases]
     .filter((r) => semver.valid(clean(r.version)))
-    .sort((a, b) => semver.compare(clean(a.version), clean(b.version)));
+    .sort((a, b) => semver.compare(clean(a.version), clean(b.version)))
+    .filter((r) => {
+      const version = clean(r.version);
+      if (seen.has(version)) return false;
+      seen.add(version);
+      return true;
+    });
   if (sorted.length === 0) {
     throw new Error("computeUpgradePath: empty catalog");
   }

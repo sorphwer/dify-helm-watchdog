@@ -100,4 +100,16 @@ describe("computeUpgradePath", () => {
       UnknownVersionError,
     );
   });
+
+  it("dedupes a catalog with a duplicated version entry to a single hop", () => {
+    const withDuplicate: EeRelease[] = [
+      ...RELEASES,
+      makeRelease("v3.10.0", true),
+    ];
+
+    const result = computeUpgradePath(withDuplicate, "v3.9.5", "v3.11.1");
+
+    expect(result.hops.map((h) => h.version)).toEqual(["v3.10.0", "v3.11.0", "v3.11.1"]);
+    expect(result.hops.filter((h) => h.version === "v3.10.0")).toHaveLength(1);
+  });
 });
