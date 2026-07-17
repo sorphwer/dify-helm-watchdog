@@ -347,6 +347,72 @@ curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/cron?pause=60' \
 
 ---
 
+### 8a) Compute upgrade path between two versions
+
+```http
+GET /api/v1/upgrade-path
+```
+
+Returns the ordered list of unskippable versions between a current and target
+Dify Enterprise version, derived from the ee.dify.ai release catalog. Each hop
+carries stop kinds, a one-line summary, the release notes URL, and the
+`versions.lock.yaml` snapshot URL.
+
+Query parameters:
+
+| Name | Type | Notes |
+|------|------|-------|
+| `from` | string | Required. Current version, with or without a leading `v` (e.g. `3.9.5`). |
+| `to` | string | Required. Target version, with or without a leading `v`. |
+
+Response shape:
+
+```json
+{
+  "from": "v3.9.5",
+  "to": "v3.11.1",
+  "hops": [
+    {
+      "version": "v3.10.0",
+      "unskippable": true,
+      "isTarget": false,
+      "stopKinds": [{ "kind": "migration", "label": "Database migration" }],
+      "stopSummary": "Database migration — back up before upgrade.",
+      "notesUrl": "https://ee.dify.ai/releases/v3.10.0",
+      "lockUrl": "https://ee.dify.ai/version-locks/v3.10.0.yaml"
+    },
+    {
+      "version": "v3.11.1",
+      "unskippable": false,
+      "isTarget": true,
+      "stopKinds": [],
+      "stopSummary": null,
+      "notesUrl": "https://ee.dify.ai/releases/v3.11.1",
+      "lockUrl": "https://ee.dify.ai/version-locks/v3.11.1.yaml"
+    }
+  ],
+  "notes": []
+}
+```
+
+Errors:
+
+- **400**: `from`/`to` missing or not a valid version, or `from >= to`.
+- **404**: `to` (or a mid-range `from`) is not a known catalog version.
+- **502**: Failed to fetch the ee.dify.ai catalog.
+
+Example:
+
+```bash
+curl 'https://dify-helm-watchdog.vercel.app/api/v1/upgrade-path?from=3.9.5&to=3.11.1'
+```
+
+Caching:
+
+- `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
+
+---
+
 ---
 
 ## MCP (Model Context Protocol) Endpoints
