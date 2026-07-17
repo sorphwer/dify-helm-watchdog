@@ -12,6 +12,13 @@ import type { ImageValidationRecord, StoredVersion } from "@/lib/types";
 import { isSkippable } from "@/lib/version-status";
 import { countValidationStatuses, normalizeValidationPayload } from "@/lib/validation";
 import { loadImageSourceRefs, supportsReleaseLock, type ImageSourceRef } from "@/lib/release-locks";
+import { isValidVersion } from "@/lib/api/guard";
+import { fetchEeCatalog } from "@/lib/ee-catalog";
+import {
+  computeUpgradePath,
+  InvalidRangeError,
+  UnknownVersionError,
+} from "@/lib/upgrade-path";
 import YAML from "yaml";
 import type {
   McpToolDefinition,
@@ -112,6 +119,25 @@ export const TOOLS: McpToolDefinition[] = [
         },
       },
       required: ["version"],
+    },
+  },
+  {
+    name: "compute_upgrade_path",
+    description:
+      "Compute the Dify Enterprise upgrade path between two versions: ordered unskippable versions with stop kinds, summaries, release-note and versions.lock.yaml links. Versions accepted with or without leading v.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: {
+          type: "string",
+          description: "Current version (with or without leading v, e.g. 3.9.5).",
+        },
+        to: {
+          type: "string",
+          description: "Target version (with or without leading v).",
+        },
+      },
+      required: ["from", "to"],
     },
   },
 ];
@@ -469,6 +495,38 @@ const getVersionReleaseNotes = async (
   }
 };
 
+const computeUpgradePathTool = async (
+  args: Record<string, unknown>,
+): Promise<McpToolResult> => {
+  const from = String(args.from ?? "").replace(/^v/, "");
+  const to = String(args.to ?? "").replace(/^v/, "");
+  if (!from || !to) {
+    return errorResult("Missing required parameters: from, to");
+  }
+  if (!isValidVersion(from) || !isValidVersion(to)) {
+    return errorResult("Parameters 'from' and 'to' must be valid versions");
+  }
+
+  let releases;
+  try {
+    releases = await fetchEeCatalog();
+  } catch (error) {
+    return errorResult(
+      `Failed to fetch ee.dify.ai catalog: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
+
+  try {
+    const result = computeUpgradePath(releases, `v${from}`, `v${to}`);
+    return jsonResult(result);
+  } catch (error) {
+    if (error instanceof UnknownVersionError || error instanceof InvalidRangeError) {
+      return errorResult(error.message);
+    }
+    throw error;
+  }
+};
+
 // Tool executor
 export const executeTool = async (
   name: string,
@@ -487,6 +545,8 @@ export const executeTool = async (
       return validateImages(args);
     case "get_version_release_notes":
       return getVersionReleaseNotes(args);
+    case "compute_upgrade_path":
+      return computeUpgradePathTool(args);
     default:
       return errorResult(`Unknown tool: ${name}`);
   }

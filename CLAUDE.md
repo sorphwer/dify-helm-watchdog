@@ -215,6 +215,7 @@ The application exposes an MCP server allowing AI models to interact programmati
 - `get_version_details` - Get version metadata
 - `list_images` - List container images for a version
 - `validate_images` - Get validation report
+- `compute_upgrade_path` - Compute the Dify Enterprise upgrade path between two versions
 
 **Available resources**:
 - `helm://versions` - Version list
