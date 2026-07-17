@@ -32,7 +32,7 @@ export const parseEeCatalog = (payload: unknown): EeRelease[] => {
     throw new Error("Unsupported ee.dify.ai catalog schema");
   }
   if (!Array.isArray(payload.releases)) {
-    return [];
+    throw new Error("Unsupported ee.dify.ai catalog schema: 'releases' must be an array");
   }
   const releases: EeRelease[] = [];
   for (const item of payload.releases) {

@@ -38,9 +38,13 @@ describe("parseEeCatalog", () => {
     );
   });
 
-  it("returns an empty array when releases is missing or not an array", () => {
-    expect(parseEeCatalog({ schemaVersion: 1 })).toEqual([]);
-    expect(parseEeCatalog({ schemaVersion: 1, releases: "nope" })).toEqual([]);
+  it("throws when releases is missing or not an array", () => {
+    expect(() => parseEeCatalog({ schemaVersion: 1 })).toThrow(
+      "Unsupported ee.dify.ai catalog schema: 'releases' must be an array",
+    );
+    expect(() => parseEeCatalog({ schemaVersion: 1, releases: "nope" })).toThrow(
+      "Unsupported ee.dify.ai catalog schema: 'releases' must be an array",
+    );
   });
 
   it("skips malformed release items", () => {
