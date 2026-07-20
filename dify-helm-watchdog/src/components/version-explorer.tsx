@@ -1022,6 +1022,27 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             </span>
           </Link>
 
+          <Link
+            href="/upgrade-path"
+            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+          >
+            <div className="flex flex-col leading-tight">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <MapPinned className="h-3.5 w-3.5 shrink-0" />
+                Plan
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                Upgrade
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                Path
+              </span>
+            </div>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ArrowUpRight className="h-5 w-5" />
+            </span>
+          </Link>
+
           <button
             type="button"
             onClick={() => setMcpModalOpen(true)}
