@@ -85,7 +85,10 @@ export const parseReleaseFeed = (
       // feed's url field, so it can never carry a javascript:/off-origin URL.
       url: `${EE_ORIGIN}/releases/v${versionMatch[1]}`,
       lts: tags.includes("LTS"),
-      nonSkippable: /must not be skipped/i.test(summarySource),
+      // Prefer the structured tag; the prose match is a fallback for feed
+      // items published before the tag existed.
+      nonSkippable:
+        tags.includes("Unskippable") || /must not be skipped/i.test(summarySource),
       summaryHtml,
       dateModified: asString(item.date_modified) || undefined,
     });
