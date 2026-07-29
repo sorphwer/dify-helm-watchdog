@@ -1,6 +1,11 @@
-import { createErrorResponse, createJsonResponse, createTextResponse } from "@/lib/api/response";
+import {
+  createErrorResponse,
+  createJsonResponse,
+  createTextResponse,
+  PUBLIC_ARTIFACT_CACHE_CONTROL,
+} from "@/lib/api/response";
 import { isValidVersion } from "@/lib/api/guard";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 import type { ImageValidationRecord } from "@/lib/types";
 import { normalizeValidationRecord } from "@/lib/validation";
 import { loadImageSourceRefs, supportsReleaseLock, type ImageSourceRef } from "@/lib/release-locks";
@@ -116,14 +121,9 @@ export async function GET(
       });
     }
 
-    let imagesText = versionEntry.images.inline;
-    if (!imagesText) {
-      const response = await fetch(versionEntry.images.url);
-      if (!response.ok) {
-        throw new Error("Failed to fetch images data");
-      }
-      imagesText = await response.text();
-    }
+    const imagesText =
+      versionEntry.images.inline ??
+      (await loadStoredAsset(versionEntry.images));
 
     const imagesData = YAML.parse(imagesText) as Record<string, ImageInfo>;
 
@@ -142,13 +142,9 @@ export async function GET(
     let validationData: Record<string, ImageValidationRecord> | null = null;
     if (includeValidation && versionEntry.imageValidation) {
       try {
-        let validationText = versionEntry.imageValidation.inline;
-        if (!validationText) {
-          const response = await fetch(versionEntry.imageValidation.url);
-          if (response.ok) {
-            validationText = await response.text();
-          }
-        }
+        const validationText =
+          versionEntry.imageValidation.inline ??
+          (await loadStoredAsset(versionEntry.imageValidation));
         if (validationText) {
           const validation = JSON.parse(validationText) as {
             images?: ImageValidationRecord[];
@@ -231,7 +227,7 @@ export async function GET(
         status: 200,
         contentType: "application/x-yaml; charset=utf-8",
         headers: {
-          "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+          "Cache-Control": PUBLIC_ARTIFACT_CACHE_CONTROL,
         },
       });
     }
@@ -246,7 +242,7 @@ export async function GET(
     return createJsonResponse(responseBody, {
       request,
       headers: {
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": PUBLIC_ARTIFACT_CACHE_CONTROL,
       },
     });
   } catch (error) {

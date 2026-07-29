@@ -93,9 +93,17 @@ export interface HeadResult {
   downloadUrl?: string;
 }
 
+export interface StorageReadOptions {
+  cache?: RequestCache;
+  next?: {
+    revalidate?: number | false;
+    tags?: string[];
+  };
+}
+
 export interface Storage {
   read(path: string): Promise<HeadResult | null>;
-  readContent(url: string): Promise<string>;
+  readContent(url: string, options?: StorageReadOptions): Promise<string>;
   write(path: string, content: string, contentType: string): Promise<StoredAsset>;
   ensureAccess(): Promise<void>;
 }

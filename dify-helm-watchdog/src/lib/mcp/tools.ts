@@ -3,7 +3,7 @@
  * Exposes Helm chart operations as callable MCP tools
  */
 
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 import {
   ReleaseNotesError,
   fetchReleaseNotesAsMarkdown,
@@ -191,13 +191,9 @@ const listVersions = async (
 
       if (includeValidation && version.imageValidation) {
         try {
-          let validationText = version.imageValidation.inline;
-          if (!validationText) {
-            const response = await fetch(version.imageValidation.url);
-            if (response.ok) {
-              validationText = await response.text();
-            }
-          }
+          const validationText =
+            version.imageValidation.inline ??
+            (await loadStoredAsset(version.imageValidation));
           if (validationText) {
             const validation = JSON.parse(validationText) as {
               images?: ImageValidationRecord[];
@@ -322,14 +318,11 @@ const listImages = async (
 
   const { entry } = result;
 
-  // Load images data
-  let imagesText = entry.images.inline;
-  if (!imagesText) {
-    const response = await fetch(entry.images.url);
-    if (!response.ok) {
-      return errorResult("Failed to fetch images data from storage.");
-    }
-    imagesText = await response.text();
+  let imagesText: string;
+  try {
+    imagesText = entry.images.inline ?? (await loadStoredAsset(entry.images));
+  } catch {
+    return errorResult("Failed to fetch images data from storage.");
   }
 
   const imagesData = YAML.parse(imagesText) as Record<string, ImageInfo>;
@@ -347,13 +340,9 @@ const listImages = async (
   let validationData: Record<string, ImageValidationRecord> | null = null;
   if (includeValidation && entry.imageValidation) {
     try {
-      let validationText = entry.imageValidation.inline;
-      if (!validationText) {
-        const response = await fetch(entry.imageValidation.url);
-        if (response.ok) {
-          validationText = await response.text();
-        }
-      }
+      const validationText =
+        entry.imageValidation.inline ??
+        (await loadStoredAsset(entry.imageValidation));
       if (validationText) {
         const validation = JSON.parse(validationText) as {
           images?: ImageValidationRecord[];
@@ -428,13 +417,13 @@ const validateImages = async (
     return errorResult(`Image validation data is not available for version ${version}.`);
   }
 
-  let validationContent = entry.imageValidation.inline;
-  if (!validationContent) {
-    const response = await fetch(entry.imageValidation.url);
-    if (!response.ok) {
-      return errorResult("Failed to fetch validation data from storage.");
-    }
-    validationContent = await response.text();
+  let validationContent: string;
+  try {
+    validationContent =
+      entry.imageValidation.inline ??
+      (await loadStoredAsset(entry.imageValidation));
+  } catch {
+    return errorResult("Failed to fetch validation data from storage.");
   }
 
   const validationData = normalizeValidationPayload(JSON.parse(validationContent));

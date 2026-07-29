@@ -1,8 +1,9 @@
 import { GET } from "@/app/api/v1/versions/[version]/validation/route";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 
 jest.mock("@/lib/helm", () => ({
   loadCache: jest.fn(),
+  loadStoredAsset: jest.fn(),
 }));
 
 const mockNormalizeValidationPayload = jest.fn();
@@ -20,6 +21,9 @@ jest.mock("@/lib/validation", () => ({
 }));
 
 const mockedLoadCache = loadCache as jest.MockedFunction<typeof loadCache>;
+const mockedLoadStoredAsset = loadStoredAsset as jest.MockedFunction<
+  typeof loadStoredAsset
+>;
 
 describe("GET /api/v1/versions/{version}/validation", () => {
   const mockValidationData = {
@@ -41,6 +45,11 @@ describe("GET /api/v1/versions/{version}/validation", () => {
 
   beforeEach(() => {
     mockNormalizeValidationPayload.mockImplementation((data) => data);
+    mockedLoadStoredAsset.mockImplementation(async (asset) => {
+      const response = await fetch(asset.url);
+      if (!response.ok) throw new Error("Failed to fetch validation data");
+      return response.text();
+    });
   });
 
   afterEach(() => {
@@ -200,7 +209,7 @@ describe("GET /api/v1/versions/{version}/validation", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, s-maxage=3600, stale-while-revalidate=86400",
+      "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
     );
     expect(fetchSpy).not.toHaveBeenCalled();
 

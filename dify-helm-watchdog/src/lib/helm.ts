@@ -4,6 +4,7 @@ import { createGunzip } from "node:zlib";
 import tar from "tar-stream";
 import YAML from "yaml";
 import semver from "semver";
+import { unstable_cache } from "next/cache";
 import type {
   CachePayload,
   ChartMirrorCheck,
@@ -39,6 +40,13 @@ import { fetchVersionStatusMap } from "./version-status";
 import { buildChartMirrorCheck, parseDifyVersionsFromIndex } from "./chart-mirror";
 import { normalizeValidationPayload } from "./validation";
 
+
+const CACHE_MANIFEST_REVALIDATE_SECONDS = 86400;
+// The hash changes on normal syncs; the TTL also catches manual same-key R2
+// overwrites where cache.json was not regenerated.
+const STORED_ASSET_REVALIDATE_SECONDS = 3600;
+
+export const HELM_CACHE_TAG = "helm-cache-manifest";
 
 const storage = createStorageService();
 
@@ -175,48 +183,6 @@ const ensureLocalAssetCopy = async (
   }
 };
 
-const attachLocalAssetContent = async (
-  payload: CachePayload,
-): Promise<CachePayload> => {
-  if (!shouldUseLocalCache) {
-    return payload;
-  }
-
-  const versions = await Promise.all(
-    payload.versions.map(async (version) => {
-      const [valuesInline, imagesInline, validationInline] = await Promise.all([
-        readLocalAsset(version.values.path),
-        readLocalAsset(version.images.path),
-        version.imageValidation
-          ? readLocalAsset(version.imageValidation.path)
-          : Promise.resolve(null),
-      ]);
-
-      return {
-        ...version,
-        values: {
-          ...version.values,
-          inline: valuesInline ?? undefined,
-        },
-        images: {
-          ...version.images,
-          inline: imagesInline ?? undefined,
-        },
-        imageValidation: version.imageValidation
-          ? {
-              ...version.imageValidation,
-              inline: validationInline ?? undefined,
-            }
-          : undefined,
-      };
-    }),
-  );
-
-  return {
-    ...payload,
-    versions,
-  };
-};
 
 const sanitizeAsset = (asset: StoredAsset): StoredAsset => ({
   path: asset.path,
@@ -901,25 +867,36 @@ const computeImageValidation = async (
 
 
 
+const readCachedRemoteAsset = unstable_cache(
+  async (url: string, hash: string): Promise<string> => {
+    const versionedUrl = new URL(url);
+    versionedUrl.searchParams.set("_hash", hash);
+    return storage.readContent(versionedUrl.toString(), {
+      next: { revalidate: STORED_ASSET_REVALIDATE_SECONDS },
+    });
+  },
+  ["helm-stored-asset"],
+  { revalidate: STORED_ASSET_REVALIDATE_SECONDS },
+);
+
+export const loadStoredAsset = async (asset: StoredAsset): Promise<string> => {
+  if (shouldUseLocalCache) {
+    return storage.readContent(asset.url);
+  }
+  return readCachedRemoteAsset(asset.url, asset.hash);
+};
+
 const enrichWithInlineContent = async (
   payload: CachePayload,
 ): Promise<CachePayload> => {
-  // In production (Vercel), preload all YAML content for ISR
-  // In development, rely on local file system via attachLocalAssetContent
-  if (shouldUseLocalCache) {
-    return attachLocalAssetContent(payload);
-  }
-
-  console.log("[helm-cache] Preloading inline content for all versions...");
-
   const enrichedVersions = await Promise.all(
     payload.versions.map(async (version) => {
       try {
         const [valuesContent, imagesContent, validationContent] = await Promise.all([
-          storage.readContent(version.values.url),
-          storage.readContent(version.images.url),
+          loadStoredAsset(version.values),
+          loadStoredAsset(version.images),
           version.imageValidation
-            ? storage.readContent(version.imageValidation.url)
+            ? loadStoredAsset(version.imageValidation)
             : Promise.resolve<string | undefined>(undefined),
         ]);
 
@@ -960,14 +937,44 @@ const enrichWithInlineContent = async (
   };
 };
 
+const readRemoteCache = async (fresh: boolean): Promise<CachePayload | null> => {
+  const cacheMetadata = await storage.read(CACHE_PATH);
+  if (!cacheMetadata) {
+    return null;
+  }
+
+  const text = await storage.readContent(
+    cacheMetadata.downloadUrl!,
+    fresh
+      ? { cache: "no-store" }
+      : {
+          next: {
+            revalidate: CACHE_MANIFEST_REVALIDATE_SECONDS,
+            tags: [HELM_CACHE_TAG],
+          },
+        },
+  );
+  return sanitizeCachePayload(JSON.parse(text) as CachePayload);
+};
+
+const readCachedRemoteCache = unstable_cache(
+  () => readRemoteCache(false),
+  ["helm-cache-manifest"],
+  {
+    revalidate: CACHE_MANIFEST_REVALIDATE_SECONDS,
+    tags: [HELM_CACHE_TAG],
+  },
+);
+
 interface LoadCacheOptions {
   enrichInlineContent?: boolean;
+  fresh?: boolean;
 }
 
 export const loadCache = async (
   options: LoadCacheOptions = {},
 ): Promise<CachePayload | null> => {
-  const enrichInlineContentOption = options.enrichInlineContent !== false;
+  const enrichInlineContentOption = options.enrichInlineContent === true;
   try {
     const localCache = await readLocalCache();
     if (localCache) {
@@ -977,21 +984,14 @@ export const loadCache = async (
         : sanitizedLocal;
     }
 
-    const cacheMetadata = await storage.read(CACHE_PATH);
-    if (!cacheMetadata) {
+    const sanitizedRemote = options.fresh
+      ? await readRemoteCache(true)
+      : await readCachedRemoteCache();
+    if (!sanitizedRemote) {
       return null;
     }
 
-    // Bypass cache to ensure we get the latest cache.json after revalidation
-    const text = await storage.readContent(cacheMetadata.downloadUrl!);
-    const payload = JSON.parse(text) as CachePayload;
-    const sanitizedRemote = sanitizeCachePayload(payload);
-
     await writeLocalCache(sanitizedRemote);
-
-    // Enrich with inline content for ISR
-    // In production: fetches from Blob and embeds in HTML
-    // In development: reads from local file system
     return enrichInlineContentOption
       ? enrichWithInlineContent(sanitizedRemote)
       : sanitizedRemote;
@@ -1115,7 +1115,7 @@ export const syncHelmData = async (
     log(`Local mode: limiting to latest ${maxVersionsToProcess} versions (${indexEntries.length} total available)`);
   }
   
-  const cache = await loadCache({ enrichInlineContent: false });
+  const cache = await loadCache({ fresh: true });
 
   const knownVersions = new Map<string, StoredVersion>(
     cache?.versions.map((entry) => [entry.version, entry]) ?? [],

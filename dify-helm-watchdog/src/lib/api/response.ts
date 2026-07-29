@@ -60,6 +60,9 @@ const generateEtag = (body: string): string => {
   return `"${hash}"`;
 };
 
+export const PUBLIC_ARTIFACT_CACHE_CONTROL =
+  "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
+
 const parseIfNoneMatch = (headerValue: string | null): string[] => {
   if (!headerValue) {
     return [];

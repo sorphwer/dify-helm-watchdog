@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 
 export const runtime = "nodejs";
 
@@ -47,22 +47,16 @@ export async function GET(
       );
     }
 
-    // Fetch validation data
-    let validationContent = versionEntry.imageValidation.inline;
-    if (!validationContent) {
-      const response = await fetch(versionEntry.imageValidation.url);
-      if (!response.ok) {
-        throw new Error("Failed to fetch validation data");
-      }
-      validationContent = await response.text();
-    }
+    const validationContent =
+      versionEntry.imageValidation.inline ??
+      (await loadStoredAsset(versionEntry.imageValidation));
 
     const validationData = JSON.parse(validationContent);
 
     return NextResponse.json(validationData, {
       status: 200,
       headers: {
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
       },
     });
   } catch (error) {

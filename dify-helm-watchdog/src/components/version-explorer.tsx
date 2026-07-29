@@ -631,13 +631,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     }
 
     const shouldFetchValues = !hasLocalValues;
-    // EE (>= 3.9.0) images go through the API to pick up release-lock source
-    // refs; older versions keep the inline / direct-R2 fast path.
-    const isEeImageVersion = Boolean(
-      semver.valid(version.version) && semver.gte(version.version, "3.9.0"),
-    );
-    const shouldFetchImages =
-      !cachedImages && (!hasLocalImages || isEeImageVersion);
+    const shouldFetchImages = !cachedImages && !hasLocalImages;
     const shouldFetchValidation =
       hasAsset && (!hasLocalValidation || isReloading);
 
@@ -667,18 +661,18 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
 
         const [valuesText, imagesText, validationText] = await Promise.all([
           shouldFetchValues || isReloading
-            ? fetch(version.values.url).then((response) => {
-              if (!response.ok) {
-                throw new Error("Failed to download cached YAML artifacts");
-              }
-              return response.text();
-            })
+            ? fetch(`/api/v1/versions/${version.version}/values`).then(
+                (response) => {
+                  if (!response.ok) {
+                    throw new Error("Failed to download cached YAML artifacts");
+                  }
+                  return response.text();
+                },
+              )
             : Promise.resolve(version.values.inline ?? ""),
           shouldFetchImages || isReloading
             ? fetch(
-                isEeImageVersion
-                  ? `/api/v1/versions/${version.version}/images?format=yaml`
-                  : version.images.url,
+                `/api/v1/versions/${version.version}/images?format=yaml`,
               ).then((response) => {
                 if (!response.ok) {
                   throw new Error("Failed to download cached YAML artifacts");
@@ -687,7 +681,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               })
             : Promise.resolve(cachedImages ?? version.images.inline ?? ""),
           shouldFetchValidation
-            ? fetch(validationAsset!.url).then((response) => {
+            ? fetch(`/api/v1/versions/${version.version}/validation`).then((response) => {
               if (!response.ok) {
                 throw new Error("Failed to download image validation payload");
               }
@@ -821,32 +815,21 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   );
 
   const loadVersionArtifacts = async (version: StoredVersion) => {
-    const resolveAsset = async (asset: StoredVersion["values"]) => {
-      if (typeof asset.inline === "string") {
-        return asset.inline;
-      }
-      const response = await fetch(asset.url);
-      if (!response.ok) {
-        throw new Error("Failed to download cached YAML artifacts");
-      }
-      return response.text();
-    };
-
-    const isEeImageVersion = Boolean(
-      semver.valid(version.version) && semver.gte(version.version, "3.9.0"),
-    );
     const [valuesText, imagesText] = await Promise.all([
-      resolveAsset(version.values),
-      isEeImageVersion
-        ? fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
-            (response) => {
-              if (!response.ok) {
-                throw new Error("Failed to download cached YAML artifacts");
-              }
-              return response.text();
-            },
-          )
-        : resolveAsset(version.images),
+      fetch(`/api/v1/versions/${version.version}/values`).then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to download cached YAML artifacts");
+        }
+        return response.text();
+      }),
+      fetch(`/api/v1/versions/${version.version}/images?format=yaml`).then(
+        (response) => {
+          if (!response.ok) {
+            throw new Error("Failed to download cached YAML artifacts");
+          }
+          return response.text();
+        },
+      ),
     ]);
 
     return {

@@ -1,11 +1,15 @@
 import { GET } from "@/app/api/v1/versions/[version]/images/route";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 
 jest.mock("@/lib/helm", () => ({
   loadCache: jest.fn(),
+  loadStoredAsset: jest.fn(),
 }));
 
 const mockedLoadCache = loadCache as jest.MockedFunction<typeof loadCache>;
+const mockedLoadStoredAsset = loadStoredAsset as jest.MockedFunction<
+  typeof loadStoredAsset
+>;
 
 describe("GET /api/v1/versions/{version}/images", () => {
   const mockImagesYaml = `
@@ -43,6 +47,14 @@ worker:
         ],
       },
     ],
+  });
+
+  beforeEach(() => {
+    mockedLoadStoredAsset.mockImplementation(async (asset) => {
+      const response = await fetch(asset.url);
+      if (!response.ok) throw new Error("Failed to fetch images data");
+      return response.text();
+    });
   });
 
   afterEach(() => {
@@ -154,7 +166,7 @@ worker:
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, s-maxage=3600, stale-while-revalidate=86400",
+      "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
     );
 
     const payload = await response.json() as {
@@ -338,7 +350,7 @@ worker:
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/x-yaml; charset=utf-8");
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, s-maxage=3600, stale-while-revalidate=86400",
+      "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
     );
 
     const yamlText = await response.text();

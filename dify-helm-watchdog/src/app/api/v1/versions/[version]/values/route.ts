@@ -1,6 +1,10 @@
-import { createErrorResponse, createTextResponse } from "@/lib/api/response";
+import {
+  createErrorResponse,
+  createTextResponse,
+  PUBLIC_ARTIFACT_CACHE_CONTROL,
+} from "@/lib/api/response";
 import { isValidVersion } from "@/lib/api/guard";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 
 export const runtime = "nodejs";
 
@@ -71,21 +75,16 @@ export async function GET(
       });
     }
 
-    let valuesContent = versionEntry.values.inline;
-    if (!valuesContent) {
-      const response = await fetch(versionEntry.values.url);
-      if (!response.ok) {
-        throw new Error("Failed to fetch values.yaml");
-      }
-      valuesContent = await response.text();
-    }
+    const valuesContent =
+      versionEntry.values.inline ??
+      (await loadStoredAsset(versionEntry.values));
 
     return createTextResponse(valuesContent, {
       request,
       status: 200,
       contentType: "application/x-yaml; charset=utf-8",
       headers: {
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": PUBLIC_ARTIFACT_CACHE_CONTROL,
         "Content-Disposition": `inline; filename="values-${version}.yaml"`,
       },
     });

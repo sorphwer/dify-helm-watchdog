@@ -1,6 +1,7 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createErrorResponse } from "@/lib/api/response";
 import {
+  HELM_CACHE_TAG,
   MissingStorageCredentialsError,
   type SyncResult,
   syncHelmData,
@@ -198,6 +199,7 @@ const createStreamResponse = (request: Request) => {
 
         write("[revalidate] Triggering ISR revalidation for homepage...");
         try {
+          revalidateTag(HELM_CACHE_TAG);
           revalidatePath("/", "page");
           write("[revalidate] Successfully cleared ISR cache for homepage");
 

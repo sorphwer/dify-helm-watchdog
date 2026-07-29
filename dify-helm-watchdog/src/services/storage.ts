@@ -6,7 +6,12 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import type { HeadResult, Storage, StoredAsset } from "../lib/types";
+import type {
+  HeadResult,
+  Storage,
+  StorageReadOptions,
+  StoredAsset,
+} from "../lib/types";
 import { LOCAL_CACHE_DIR_RELATIVE } from "../constants/helm";
 import { MissingStorageCredentialsError } from "../lib/storage-errors";
 
@@ -28,6 +33,9 @@ const computeHash = (input: string): string =>
 
 const stripTrailingSlash = (value: string): string =>
   value.endsWith("/") ? value.slice(0, -1) : value;
+
+const R2_BROWSER_CACHE_CONTROL =
+  "public, max-age=3600, stale-while-revalidate=86400";
 
 export class R2StorageService implements Storage {
   private client: S3Client | null = null;
@@ -122,11 +130,14 @@ export class R2StorageService implements Storage {
     }
   }
 
-  async readContent(url: string): Promise<string> {
+  async readContent(
+    url: string,
+    options: StorageReadOptions = { cache: "no-store" },
+  ): Promise<string> {
     try {
       const response = await fetch(url, {
         headers: { "User-Agent": "dify-helm-watchdog" },
-        cache: "no-store",
+        ...options,
       });
 
       if (!response.ok) {
@@ -156,6 +167,7 @@ export class R2StorageService implements Storage {
         Key: assetPath,
         Body: content,
         ContentType: contentType,
+        CacheControl: R2_BROWSER_CACHE_CONTROL,
       }),
     );
 
@@ -200,7 +212,12 @@ export class LocalStorageService implements Storage {
     }
   }
 
-  async readContent(url: string): Promise<string> {
+  async readContent(
+    url: string,
+    // Local files are already keyed by content hash in the cache manifest.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _options?: StorageReadOptions,
+  ): Promise<string> {
     if (!url.startsWith("file://")) {
       throw new Error(`Invalid local file URL: ${url}`);
     }

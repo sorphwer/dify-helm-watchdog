@@ -1,11 +1,15 @@
 import { GET } from "@/app/api/v1/versions/[version]/values/route";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 
 jest.mock("@/lib/helm", () => ({
   loadCache: jest.fn(),
+  loadStoredAsset: jest.fn(),
 }));
 
 const mockedLoadCache = loadCache as jest.MockedFunction<typeof loadCache>;
+const mockedLoadStoredAsset = loadStoredAsset as jest.MockedFunction<
+  typeof loadStoredAsset
+>;
 
 describe("GET /api/v1/versions/{version}/values", () => {
   const mockValuesYaml = `
@@ -20,6 +24,14 @@ api:
 web:
   replicas: 1
 `;
+
+  beforeEach(() => {
+    mockedLoadStoredAsset.mockImplementation(async (asset) => {
+      const response = await fetch(asset.url);
+      if (!response.ok) throw new Error("Failed to fetch values.yaml");
+      return response.text();
+    });
+  });
 
   afterEach(() => {
     jest.restoreAllMocks();
@@ -135,7 +147,7 @@ web:
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/x-yaml; charset=utf-8");
     expect(response.headers.get("Cache-Control")).toBe(
-      "public, s-maxage=3600, stale-while-revalidate=86400",
+      "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
     );
     expect(response.headers.get("Content-Disposition")).toBe(
       'inline; filename="values-2.5.0.yaml"',

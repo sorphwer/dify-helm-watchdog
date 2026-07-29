@@ -1,6 +1,10 @@
-import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
+import {
+  createErrorResponse,
+  createJsonResponse,
+  PUBLIC_ARTIFACT_CACHE_CONTROL,
+} from "@/lib/api/response";
 import { isValidVersion } from "@/lib/api/guard";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 import { normalizeValidationPayload } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -93,14 +97,9 @@ export async function GET(
       });
     }
 
-    let validationContent = versionEntry.imageValidation.inline;
-    if (!validationContent) {
-      const response = await fetch(versionEntry.imageValidation.url);
-      if (!response.ok) {
-        throw new Error("Failed to fetch validation data");
-      }
-      validationContent = await response.text();
-    }
+    const validationContent =
+      versionEntry.imageValidation.inline ??
+      (await loadStoredAsset(versionEntry.imageValidation));
 
     const validationData = normalizeValidationPayload(
       JSON.parse(validationContent),
@@ -115,7 +114,7 @@ export async function GET(
     return createJsonResponse(validationData, {
       request,
       headers: {
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": PUBLIC_ARTIFACT_CACHE_CONTROL,
       },
     });
   } catch (error) {

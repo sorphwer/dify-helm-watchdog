@@ -1,5 +1,5 @@
 import { createErrorResponse, createJsonResponse } from "@/lib/api/response";
-import { loadCache } from "@/lib/helm";
+import { loadCache, loadStoredAsset } from "@/lib/helm";
 import type { ImageValidationRecord, StoredVersion, VersionStatus } from "@/lib/types";
 import { countValidationStatuses } from "@/lib/validation";
 import { isSkippable } from "@/lib/version-status";
@@ -36,15 +36,9 @@ const computeImageValidationStats = async (
   }
 
   try {
-    let validationText = version.imageValidation.inline;
-
-    if (!validationText) {
-      const response = await fetch(version.imageValidation.url);
-      if (!response.ok) {
-        return undefined;
-      }
-      validationText = await response.text();
-    }
+    const validationText =
+      version.imageValidation.inline ??
+      (await loadStoredAsset(version.imageValidation));
 
     const validation = JSON.parse(validationText) as {
       images?: ImageValidationRecord[];

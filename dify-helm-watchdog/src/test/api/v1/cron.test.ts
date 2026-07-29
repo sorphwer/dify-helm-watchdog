@@ -1,9 +1,14 @@
 import { POST } from "@/app/api/v1/cron/route";
-import { syncHelmData, MissingStorageCredentialsError } from "@/lib/helm";
-import { revalidatePath } from "next/cache";
+import {
+  HELM_CACHE_TAG,
+  MissingStorageCredentialsError,
+  syncHelmData,
+} from "@/lib/helm";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 jest.mock("@/lib/helm", () => ({
   syncHelmData: jest.fn(),
+  HELM_CACHE_TAG: "helm-cache-manifest",
   MissingStorageCredentialsError: class MissingStorageCredentialsError extends Error {
     constructor() {
       super(
@@ -16,6 +21,7 @@ jest.mock("@/lib/helm", () => ({
 
 jest.mock("next/cache", () => ({
   revalidatePath: jest.fn(),
+  revalidateTag: jest.fn(),
 }));
 
 const mockedSyncHelmData = syncHelmData as jest.MockedFunction<typeof syncHelmData>;
@@ -27,7 +33,7 @@ describe("POST /api/v1/cron", () => {
     jest.resetModules();
     process.env = { ...originalEnv };
     delete process.env.CRON_API_KEY;
-    delete process.env.ENABLE_CACHE_WARMUP;
+    process.env.ENABLE_CACHE_WARMUP = "false";
     delete process.env.VERCEL_URL;
     delete process.env.NEXT_PUBLIC_SITE_URL;
   });
@@ -343,6 +349,7 @@ describe("POST /api/v1/cron", () => {
     const text = await streamToText(response);
     expect(text).toContain("[revalidate] Triggering ISR revalidation for homepage...");
     expect(text).toContain("[revalidate] Successfully cleared ISR cache for homepage");
+    expect(revalidateTag).toHaveBeenCalledWith(HELM_CACHE_TAG);
     expect(revalidatePath).toHaveBeenCalledWith("/", "page");
   });
 
@@ -376,6 +383,7 @@ describe("POST /api/v1/cron", () => {
   });
 
   it("should attempt cache warmup when enabled", async () => {
+    process.env.ENABLE_CACHE_WARMUP = "true";
     process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
 
     const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValueOnce({
@@ -417,6 +425,7 @@ describe("POST /api/v1/cron", () => {
   });
 
   it("should handle warmup failure gracefully", async () => {
+    process.env.ENABLE_CACHE_WARMUP = "true";
     process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
 
     const fetchSpy = jest
