@@ -16,32 +16,20 @@ interface McpConfigModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type ConfigType = "sse" | "http";
-
 // MCP configuration generators
 const getBaseUrl = () =>
   typeof window !== "undefined"
     ? window.location.origin
     : "https://dify-helm-watchdog.vercel.app";
 
-const getMcpConfigs = () => {
+const getMcpConfig = () => {
   const baseUrl = getBaseUrl();
 
   return {
-    sse: {
-      "dify-helm-watchdog": {
-        url: `${baseUrl}/api/v1/sse`,
-        headers: {},
-        timeout: 60,
-        sse_read_timeout: 300,
-      },
-    },
-    http: {
-      "dify-helm-watchdog": {
-        url: `${baseUrl}/api/v1/mcp`,
-        headers: {},
-        timeout: 60,
-      },
+    "dify-helm-watchdog": {
+      url: `${baseUrl}/api/v1/mcp`,
+      headers: {},
+      timeout: 60,
     },
   };
 };
@@ -51,10 +39,8 @@ export default function McpConfigModal({
   onOpenChange,
 }: McpConfigModalProps) {
   const [copied, setCopied] = useState(false);
-  const [configType, setConfigType] = useState<ConfigType>("http");
 
-  const configs = getMcpConfigs();
-  const config = configs[configType];
+  const config = getMcpConfig();
   const configJson = JSON.stringify(config, null, 2);
 
   const handleCopy = useCallback(async () => {
@@ -81,37 +67,9 @@ export default function McpConfigModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Transport selector */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setConfigType("sse")}
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                configType === "sse"
-                  ? "border-brand bg-brand/10 text-brand"
-                  : "border-border bg-card text-muted-foreground/60 hover:bg-accent/10"
-              }`}
-            >
-              SSE Transport
-              <span className="block text-[10px] font-normal opacity-60">For persistent connections</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfigType("http")}
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                configType === "http"
-                  ? "border-brand bg-brand/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-accent/10"
-              }`}
-            >
-              Streamable HTTP
-              <span className="block text-[10px] font-normal text-brand">✓ Recommended</span>
-            </button>
-          </div>
-
           {/* Configuration JSON */}
           <div className="relative">
-            <pre className="custom-scrollbar overflow-auto rounded-lg border border-border bg-muted/50 p-4 text-xs font-mono leading-relaxed max-h-[200px]">
+            <pre className="custom-scrollbar overflow-auto rounded-lg border border-border bg-muted/50 p-4 text-xs font-mono leading-relaxed max-h-[200px] whitespace-pre-wrap break-all">
               <code className="text-foreground">{configJson}</code>
             </pre>
             <Button
@@ -143,6 +101,8 @@ export default function McpConfigModal({
               <span>• get_version_details</span>
               <span>• list_images</span>
               <span>• validate_images</span>
+              <span>• get_version_release_notes</span>
+              <span>• compute_upgrade_path</span>
             </div>
           </div>
 

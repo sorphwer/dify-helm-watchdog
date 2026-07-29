@@ -37,7 +37,7 @@ describe("isSuspiciousApiPath", () => {
     "/api/v1/releases/3.10.0",
     "/api/v1/cache",
     "/api/v1/mcp",
-    "/api/v1/sse",
+    "/api/v1/analytics",
   ])("passes legit path %s", (path) => {
     expect(isSuspiciousApiPath(path)).toBe(false);
   });

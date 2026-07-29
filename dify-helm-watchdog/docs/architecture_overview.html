@@ -369,13 +369,7 @@
       <div class="card orch" id="card-mcp">
         <div class="status"></div>
         <div class="title">MCP · /api/v1/mcp</div>
-        <div class="desc">JSON-RPC 2.0 分发器 · 6 tools：<code>list_versions / get_latest_version / get_version_details / list_images / validate_images / get_version_release_notes</code> · 2 prompts</div>
-      </div>
-      <div class="arrow soft">·</div>
-      <div class="card done" id="card-sse">
-        <div class="status"></div>
-        <div class="title">/api/v1/sse</div>
-        <div class="desc">MCP 的 Server-Sent Events 传输；按 <code>sessionId</code> 路由消息</div>
+        <div class="desc">无状态 Streamable HTTP · JSON-RPC 2.0 分发器 · 7 tools：<code>list_versions / get_latest_version / get_version_details / list_images / validate_images / get_version_release_notes / compute_upgrade_path</code> · 2 prompts</div>
       </div>
       <div class="divider"></div>
       <div class="divider-label">文档</div>
@@ -448,7 +442,7 @@
       <div class="card done" id="card-mcp-clients">
         <div class="status"></div>
         <div class="title">MCP AI Clients</div>
-        <div class="desc">Claude Code / IDE 代理通过 Streamable HTTP 或 SSE 调用 6 个工具</div>
+        <div class="desc">Claude Code / IDE 代理通过无状态 Streamable HTTP 调用 7 个工具</div>
       </div>
       <div class="arrow soft">·</div>
       <div class="card done" id="card-api-consumers">
@@ -512,7 +506,6 @@
     // ⑤ → ⑥ observability
     ['card-rest-v1', 'card-analytics-instrumentation'],
     ['card-mcp',     'card-analytics-instrumentation'],
-    ['card-sse',     'card-analytics-instrumentation'],
 
     // ⑤/⑥ → ⑦ consumers
     ['card-rest-v1',      'card-api-consumers'],
@@ -520,7 +513,6 @@
     ['card-releases-api', 'card-ui'],
     ['card-workflow-api', 'card-ui'],
     ['card-mcp',          'card-mcp-clients'],
-    ['card-sse',          'card-mcp-clients'],
     ['card-openapi',      'card-swagger'],
     ['card-analytics-api', 'card-api-consumers'],
   ];

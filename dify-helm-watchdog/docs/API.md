@@ -347,6 +347,72 @@ curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/cron?pause=60' \
 
 ---
 
+### 8a) Compute upgrade path between two versions
+
+```http
+GET /api/v1/upgrade-path
+```
+
+Returns the ordered list of unskippable versions between a current and target
+Dify Enterprise version, derived from the ee.dify.ai release catalog. Each hop
+carries stop kinds, a one-line summary, the release notes URL, and the
+`versions.lock.yaml` snapshot URL.
+
+Query parameters:
+
+| Name | Type | Notes |
+|------|------|-------|
+| `from` | string | Required. Current version, with or without a leading `v` (e.g. `3.9.5`). |
+| `to` | string | Required. Target version, with or without a leading `v`. |
+
+Response shape:
+
+```json
+{
+  "from": "v3.9.5",
+  "to": "v3.11.1",
+  "hops": [
+    {
+      "version": "v3.10.0",
+      "unskippable": true,
+      "isTarget": false,
+      "stopKinds": [{ "kind": "migration", "label": "Database migration" }],
+      "stopSummary": "Database migration — back up before upgrade.",
+      "notesUrl": "https://ee.dify.ai/releases/v3.10.0",
+      "lockUrl": "https://ee.dify.ai/version-locks/v3.10.0.yaml"
+    },
+    {
+      "version": "v3.11.1",
+      "unskippable": false,
+      "isTarget": true,
+      "stopKinds": [],
+      "stopSummary": null,
+      "notesUrl": "https://ee.dify.ai/releases/v3.11.1",
+      "lockUrl": "https://ee.dify.ai/version-locks/v3.11.1.yaml"
+    }
+  ],
+  "notes": []
+}
+```
+
+Errors:
+
+- **400**: `from`/`to` missing or not a valid version, or `from >= to`.
+- **404**: `to` (or a mid-range `from`) is not a known catalog version.
+- **502**: Failed to fetch the ee.dify.ai catalog.
+
+Example:
+
+```bash
+curl 'https://dify-helm-watchdog.vercel.app/api/v1/upgrade-path?from=3.9.5&to=3.11.1'
+```
+
+Caching:
+
+- `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
+
+---
+
 ---
 
 ## MCP (Model Context Protocol) Endpoints
@@ -371,7 +437,7 @@ Response:
 
 ```json
 {
-  "protocolVersion": "2024-11-05",
+  "protocolVersion": "2026-07-28",
   "serverInfo": {
     "name": "dify-helm-watchdog",
     "version": "1.0.0"
@@ -384,7 +450,6 @@ Response:
     }
   },
   "endpoints": {
-    "sse": "/api/v1/sse",
     "streamableHttp": "/api/v1/mcp"
   }
 }
@@ -398,7 +463,9 @@ Response:
 POST /api/v1/mcp
 ```
 
-Processes JSON-RPC 2.0 messages according to the MCP protocol.
+Processes JSON-RPC 2.0 messages according to the MCP protocol. The transport is a stateless Streamable HTTP endpoint — no session IDs or persistent connections are required.
+
+`initialize` negotiates the protocol version: if the client's requested `params.protocolVersion` is one of the supported versions (`2026-07-28`, `2025-06-18`, `2025-03-26`, `2024-11-05`), the server echoes it back; otherwise it responds with the default `2026-07-28`.
 
 **Available methods:**
 
@@ -423,6 +490,8 @@ Processes JSON-RPC 2.0 messages according to the MCP protocol.
 | `get_version_details` | Returns detailed metadata for a specific Helm chart version |
 | `list_images` | Lists all container images declared in a Helm chart version |
 | `validate_images` | Returns the image validation report for a specific Helm chart version |
+| `get_version_release_notes` | Returns the release notes (Details tab content) for a specific Helm chart version as Markdown |
+| `compute_upgrade_path` | Computes the Dify Enterprise upgrade path between two versions |
 
 **Available resources:**
 
@@ -472,31 +541,16 @@ curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/mcp' \
 
 ---
 
-### 11) MCP SSE Transport
+### 11) Client configuration
 
-```http
-GET /api/v1/sse
-```
-
-Establishes a Server-Sent Events connection for MCP communication. Returns an `endpoint` event with a POST URL for sending messages.
-
-```http
-POST /api/v1/sse?sessionId={sessionId}
-```
-
-Sends JSON-RPC messages via SSE transport. Responses are either returned inline or sent via the associated SSE stream.
-
-**Dify MCP Plugin Configuration:**
-
-To use this MCP server with Dify's MCP SSE plugin, configure it as follows:
+To use this MCP server with Dify's MCP plugin or other MCP-compatible clients, configure the Streamable HTTP endpoint as follows:
 
 ```json
 {
   "dify-helm-watchdog": {
-    "url": "https://dify-helm-watchdog.vercel.app/api/v1/sse",
+    "url": "https://dify-helm-watchdog.vercel.app/api/v1/mcp",
     "headers": {},
-    "timeout": 60,
-    "sse_read_timeout": 300
+    "timeout": 60
   }
 }
 ```

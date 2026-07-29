@@ -45,6 +45,22 @@ describe("parseReleaseFeed", () => {
     expect(map.get("3.10.0")?.nonSkippable).toBe(true);
   });
 
+  it("derives non-skippable from the Unskippable tag without the prose phrase", () => {
+    const map = parseReleaseFeed({
+      items: [
+        {
+          id: "https://ee.dify.ai/releases/v3.11.0",
+          url: "https://ee.dify.ai/releases/v3.11.0",
+          title: "Release v3.11.0",
+          tags: ["Regular", "Breaking", "Unskippable"],
+          content_html: "<p>No prose marker here.</p>",
+        },
+      ],
+    });
+
+    expect(map.get("3.11.0")?.nonSkippable).toBe(true);
+  });
+
   it("strips script blocks from feed summaries", () => {
     const map = parseReleaseFeed(RELEASE_FEED_PAYLOAD);
 

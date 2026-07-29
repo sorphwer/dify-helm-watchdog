@@ -136,7 +136,13 @@ export interface McpResourceRefContent {
 export type McpContent = McpTextContent | McpImageContent | McpResourceRefContent;
 
 // MCP List results
-export interface McpListToolsResult {
+export interface McpListCacheHints {
+  /** Suggested client cache TTL in milliseconds */
+  ttlMs: number;
+  cacheScope: "public";
+}
+
+export interface McpListToolsResult extends McpListCacheHints {
   tools: McpToolDefinition[];
 }
 
@@ -148,15 +154,18 @@ export interface McpListResourceTemplatesResult {
   resourceTemplates: McpResourceTemplate[];
 }
 
-// SSE Session types
-export interface McpSession {
-  id: string;
-  createdAt: Date;
-  lastActivity: Date;
-}
-
 // Server constants
-export const MCP_PROTOCOL_VERSION = "2024-11-05";
+/** Supported MCP protocol versions, newest first */
+export const MCP_SUPPORTED_PROTOCOL_VERSIONS = [
+  "2026-07-28",
+  "2025-06-18",
+  "2025-03-26",
+  "2024-11-05",
+] as const;
+/** Default (newest) advertised protocol version */
+export const MCP_PROTOCOL_VERSION = MCP_SUPPORTED_PROTOCOL_VERSIONS[0];
+/** Suggested cache TTL for tools/list and prompts/list results */
+export const MCP_LIST_CACHE_TTL_MS = 3_600_000;
 export const MCP_SERVER_NAME = "dify-helm-watchdog";
 export const MCP_SERVER_VERSION = "1.0.0";
 

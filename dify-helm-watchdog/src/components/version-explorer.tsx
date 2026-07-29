@@ -41,6 +41,7 @@ import ValuesWizardModal from "@/components/modals/values-wizard-modal";
 import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
 import McpConfigModal from "@/components/modals/mcp-config-modal";
 import WorkflowLogsModal from "@/components/modals/workflow-logs-modal";
+import UpgradePathModal from "@/components/modals/upgrade-path-modal";
 import { parseSidebarMd } from "@/lib/version-status";
 import DOMPurify from "isomorphic-dompurify";
 
@@ -933,6 +934,16 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   const lastSync = formatDateParts(data?.updateTime);
+  const openUpgradePlan = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("upgrade-plan", "true");
+    url.searchParams.delete("from");
+    url.searchParams.delete("to");
+    window.history.pushState(null, "", url);
+  };
+  const upgradePlanOpen =
+    searchParams.has("upgrade-plan") &&
+    searchParams.get("upgrade-plan") !== "false";
 
   return (
     <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
@@ -1004,6 +1015,28 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
               <ArrowUpRight className="h-5 w-5" />
             </span>
           </Link>
+
+          <button
+            type="button"
+            onClick={openUpgradePlan}
+            className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
+          >
+            <div className="flex flex-col leading-tight">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <MapPinned className="h-3.5 w-3.5 shrink-0" />
+                Plan
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                Upgrade
+              </span>
+              <span className="text-xs font-medium text-foreground whitespace-nowrap">
+                Path
+              </span>
+            </div>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
+              <ArrowUpRight className="h-5 w-5" />
+            </span>
+          </button>
 
           <button
             type="button"
@@ -1476,6 +1509,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         imageTagMap={imageTagMap}
         templateValuesYaml={valuesContent}
       />
+
+      <UpgradePathModal open={upgradePlanOpen} />
 
       <McpConfigModal
         open={mcpModalOpen}
