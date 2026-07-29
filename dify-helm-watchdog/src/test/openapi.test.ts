@@ -33,6 +33,49 @@ describe("GET /openapi.json", () => {
     expect(payload.paths).toBeDefined();
     expect(payload.paths).toHaveProperty("/api/v1/versions");
   });
+
+  it("documents the MCP Streamable HTTP transport without SSE or batch requests", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
+    const request = new Request("http://localhost/openapi.json");
+    const response = await GET(request);
+
+    const payload = (await response.json()) as {
+      paths?: Record<string, unknown>;
+    };
+    const paths = payload.paths ?? {};
+
+    // The legacy SSE transport is gone: no documented path references it.
+    const ssePaths = Object.keys(paths).filter((key) => /sse/i.test(key));
+    expect(ssePaths).toEqual([]);
+
+    // The Streamable HTTP endpoint no longer documents undocumented batch
+    // (JSON-RPC array) requests: the POST requestBody schema must not offer an
+    // array branch, whether directly typed or via oneOf.
+    const mcpPost = (paths["/api/v1/mcp"] as { post?: unknown } | undefined)
+      ?.post as
+      | {
+          requestBody?: {
+            content?: {
+              "application/json"?: {
+                schema?: {
+                  type?: string;
+                  oneOf?: Array<{ type?: string }>;
+                };
+              };
+            };
+          };
+        }
+      | undefined;
+    const schema =
+      mcpPost?.requestBody?.content?.["application/json"]?.schema;
+    expect(schema).toBeDefined();
+    expect(schema?.type).not.toBe("array");
+    if (Array.isArray(schema?.oneOf)) {
+      expect(schema?.oneOf?.every((branch) => branch.type !== "array")).toBe(
+        true,
+      );
+    }
+  });
 });
 
 

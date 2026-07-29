@@ -10,11 +10,14 @@ import { listPrompts, getPrompt } from "./prompts";
 import { trackEvent } from "@/lib/analytics/track";
 import {
   JSON_RPC_ERRORS,
+  MCP_LIST_CACHE_TTL_MS,
   MCP_PROTOCOL_VERSION,
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
+  MCP_SUPPORTED_PROTOCOL_VERSIONS,
   type JsonRpcRequest,
   type JsonRpcResponse,
+  type McpInitializeParams,
   type McpInitializeResult,
   type McpListToolsResult,
   type McpToolCallParams,
@@ -66,24 +69,42 @@ const createErrorResponse = (
   },
 });
 
-// Handle initialize request
+// Negotiate the protocol version: echo a supported client-requested version,
+// otherwise fall back to the newest supported version.
+const negotiateProtocolVersion = (requested?: string): string =>
+  requested &&
+  (MCP_SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(requested)
+    ? requested
+    : MCP_PROTOCOL_VERSION;
+
+// Shared server description for initialize and server/discover
+const buildServerDescription = (
+  requestedVersion?: string,
+): McpInitializeResult => ({
+  protocolVersion: negotiateProtocolVersion(requestedVersion),
+  capabilities: {
+    tools: {},
+    prompts: {},
+  },
+  serverInfo: {
+    name: MCP_SERVER_NAME,
+    version: MCP_SERVER_VERSION,
+  },
+});
+
+// Handle initialize request (version negotiation per 2026-07-28 spec)
 const handleInitialize = (
   id: string | number | undefined,
-): JsonRpcResponse => {
-  const result: McpInitializeResult = {
-    protocolVersion: MCP_PROTOCOL_VERSION,
-    capabilities: {
-      tools: {},
-      prompts: {},
-    },
-    serverInfo: {
-      name: MCP_SERVER_NAME,
-      version: MCP_SERVER_VERSION,
-    },
-  };
+  params?: Partial<McpInitializeParams>,
+): JsonRpcResponse =>
+  createResponse(id, buildServerDescription(params?.protocolVersion));
 
-  return createResponse(id, result);
-};
+// Handle server/discover request — callable without prior initialize
+const handleServerDiscover = (
+  id: string | number | undefined,
+  params?: Partial<McpInitializeParams>,
+): JsonRpcResponse =>
+  createResponse(id, buildServerDescription(params?.protocolVersion));
 
 // Handle ping request
 const handlePing = (id: string | number | undefined): JsonRpcResponse => {
@@ -94,6 +115,8 @@ const handlePing = (id: string | number | undefined): JsonRpcResponse => {
 const handleToolsList = (id: string | number | undefined): JsonRpcResponse => {
   const result: McpListToolsResult = {
     tools: TOOLS,
+    ttlMs: MCP_LIST_CACHE_TTL_MS,
+    cacheScope: "public",
   };
   return createResponse(id, result);
 };
@@ -104,6 +127,7 @@ const handleToolsCall = async (
   params: McpToolCallParams,
   sessionHash?: string,
   country?: string,
+  analyticsMethod?: string,
 ): Promise<JsonRpcResponse> => {
   if (!params?.name) {
     return createErrorResponse(
@@ -130,7 +154,7 @@ const handleToolsCall = async (
       after(() => {
         trackEvent({
           kind: "mcp",
-          name: params.name,
+          name: analyticsMethod ?? params.name,
           sessionHash,
           country,
           latencyMs: Date.now() - start,
@@ -143,7 +167,7 @@ const handleToolsCall = async (
       after(() => {
         trackEvent({
           kind: "mcp",
-          name: params.name,
+          name: analyticsMethod ?? params.name,
           sessionHash,
           country,
           latencyMs: Date.now() - start,
@@ -160,7 +184,11 @@ const handleToolsCall = async (
 
 // Handle prompts/list request
 const handlePromptsList = (id: string | number | undefined): JsonRpcResponse => {
-  const result = listPrompts();
+  const result = {
+    ...listPrompts(),
+    ttlMs: MCP_LIST_CACHE_TTL_MS,
+    cacheScope: "public" as const,
+  };
   return createResponse(id, result);
 };
 
@@ -194,6 +222,7 @@ export const handleMessage = async (
   message: unknown,
   sessionHash?: string,
   country?: string,
+  analyticsMethod?: string,
 ): Promise<JsonRpcResponse | null> => {
   // Validate request format
   if (!isValidRequest(message)) {
@@ -225,7 +254,16 @@ export const handleMessage = async (
   // Route to appropriate handler
   switch (method) {
     case "initialize":
-      return handleInitialize(id);
+      return handleInitialize(
+        id,
+        (params ?? {}) as unknown as Partial<McpInitializeParams>,
+      );
+
+    case "server/discover":
+      return handleServerDiscover(
+        id,
+        (params ?? {}) as unknown as Partial<McpInitializeParams>,
+      );
 
     case "ping":
       return handlePing(id);
@@ -239,6 +277,7 @@ export const handleMessage = async (
         (params ?? {}) as unknown as McpToolCallParams,
         sessionHash,
         country,
+        analyticsMethod,
       );
 
     case "prompts/list":
@@ -261,10 +300,11 @@ export const handleJsonMessage = async (
   jsonString: string,
   sessionHash?: string,
   country?: string,
+  analyticsMethod?: string,
 ): Promise<JsonRpcResponse | null> => {
   try {
     const message = JSON.parse(jsonString) as unknown;
-    return handleMessage(message, sessionHash, country);
+    return handleMessage(message, sessionHash, country, analyticsMethod);
   } catch {
     return createErrorResponse(
       undefined,
@@ -273,26 +313,3 @@ export const handleJsonMessage = async (
     );
   }
 };
-
-// Format response for SSE
-export const formatSseEvent = (
-  data: unknown,
-  event?: string,
-  id?: string,
-): string => {
-  const lines: string[] = [];
-
-  if (id) {
-    lines.push(`id: ${id}`);
-  }
-
-  if (event) {
-    lines.push(`event: ${event}`);
-  }
-
-  lines.push(`data: ${JSON.stringify(data)}`);
-  lines.push(""); // Empty line to end event
-
-  return lines.join("\n") + "\n";
-};
-

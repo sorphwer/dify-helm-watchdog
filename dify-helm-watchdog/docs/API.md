@@ -437,7 +437,7 @@ Response:
 
 ```json
 {
-  "protocolVersion": "2024-11-05",
+  "protocolVersion": "2026-07-28",
   "serverInfo": {
     "name": "dify-helm-watchdog",
     "version": "1.0.0"
@@ -450,7 +450,6 @@ Response:
     }
   },
   "endpoints": {
-    "sse": "/api/v1/sse",
     "streamableHttp": "/api/v1/mcp"
   }
 }
@@ -464,7 +463,9 @@ Response:
 POST /api/v1/mcp
 ```
 
-Processes JSON-RPC 2.0 messages according to the MCP protocol.
+Processes JSON-RPC 2.0 messages according to the MCP protocol. The transport is a stateless Streamable HTTP endpoint — no session IDs or persistent connections are required.
+
+`initialize` negotiates the protocol version: if the client's requested `params.protocolVersion` is one of the supported versions (`2026-07-28`, `2025-06-18`, `2025-03-26`, `2024-11-05`), the server echoes it back; otherwise it responds with the default `2026-07-28`.
 
 **Available methods:**
 
@@ -540,31 +541,16 @@ curl -X POST 'https://dify-helm-watchdog.vercel.app/api/v1/mcp' \
 
 ---
 
-### 11) MCP SSE Transport
+### 11) Client configuration
 
-```http
-GET /api/v1/sse
-```
-
-Establishes a Server-Sent Events connection for MCP communication. Returns an `endpoint` event with a POST URL for sending messages.
-
-```http
-POST /api/v1/sse?sessionId={sessionId}
-```
-
-Sends JSON-RPC messages via SSE transport. Responses are either returned inline or sent via the associated SSE stream.
-
-**Dify MCP Plugin Configuration:**
-
-To use this MCP server with Dify's MCP SSE plugin, configure it as follows:
+To use this MCP server with Dify's MCP plugin or other MCP-compatible clients, configure the Streamable HTTP endpoint as follows:
 
 ```json
 {
   "dify-helm-watchdog": {
-    "url": "https://dify-helm-watchdog.vercel.app/api/v1/sse",
+    "url": "https://dify-helm-watchdog.vercel.app/api/v1/mcp",
     "headers": {},
-    "timeout": 60,
-    "sse_read_timeout": 300
+    "timeout": 60
   }
 }
 ```

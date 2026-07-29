@@ -16,6 +16,7 @@ import {
   MCP_PROTOCOL_VERSION,
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
+  MCP_SUPPORTED_PROTOCOL_VERSIONS,
 } from "@/lib/mcp/types";
 
 export const runtime = "nodejs";
@@ -59,8 +60,8 @@ export async function GET(request: Request) {
       tools: {},
       prompts: {},
     },
+    supportedProtocolVersions: MCP_SUPPORTED_PROTOCOL_VERSIONS,
     endpoints: {
-      sse: "/api/v1/sse",
       streamableHttp: "/api/v1/mcp",
     },
     documentation: {
@@ -83,16 +84,25 @@ export async function GET(request: Request) {
  *   post:
  *     summary: Send MCP message via Streamable HTTP
  *     description: |
- *       Processes JSON-RPC 2.0 messages according to the MCP protocol.
- *       Supports both single requests and batch requests.
+ *       Processes JSON-RPC 2.0 messages according to the MCP protocol
+ *       (2026-07-28 specification). Each request is self-contained; the
+ *       server keeps no protocol state between requests.
  *
  *       Available methods:
- *       - `initialize` - Initialize the MCP session
+ *       - `initialize` - Negotiate protocol version and capabilities
+ *       - `server/discover` - Server capabilities without a prior initialize
  *       - `ping` - Health check
- *       - `tools/list` - List available tools
+ *       - `tools/list` - List available tools (includes cache hints)
  *       - `tools/call` - Execute a tool
- *       - `prompts/list` - List available prompt templates
+ *       - `prompts/list` - List available prompt templates (includes cache hints)
  *       - `prompts/get` - Get a prompt template with arguments
+ *     parameters:
+ *       - in: header
+ *         name: Mcp-Method
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Optional JSON-RPC method name hint used for analytics.
  *     tags:
  *       - MCP
  *     requestBody:
@@ -100,26 +110,21 @@ export async function GET(request: Request) {
  *       content:
  *         application/json:
  *           schema:
- *             oneOf:
- *               - type: object
- *                 description: Single JSON-RPC request
- *                 properties:
- *                   jsonrpc:
- *                     type: string
- *                     enum: ["2.0"]
- *                   id:
- *                     oneOf:
- *                       - type: string
- *                       - type: number
- *                   method:
- *                     type: string
- *                     example: "tools/list"
- *                   params:
- *                     type: object
- *               - type: array
- *                 description: Batch of JSON-RPC requests
- *                 items:
- *                   type: object
+ *             type: object
+ *             description: JSON-RPC 2.0 request
+ *             properties:
+ *               jsonrpc:
+ *                 type: string
+ *                 enum: ["2.0"]
+ *               id:
+ *                 oneOf:
+ *                   - type: string
+ *                   - type: number
+ *               method:
+ *                 type: string
+ *                 example: "tools/list"
+ *               params:
+ *                 type: object
  *           examples:
  *             initialize:
  *               summary: Initialize session
@@ -128,7 +133,7 @@ export async function GET(request: Request) {
  *                 id: 1
  *                 method: initialize
  *                 params:
- *                   protocolVersion: "2024-11-05"
+ *                   protocolVersion: "2026-07-28"
  *                   capabilities: {}
  *                   clientInfo:
  *                     name: "example-client"
@@ -151,26 +156,22 @@ export async function GET(request: Request) {
  *                     includeValidation: true
  *     responses:
  *       200:
- *         description: JSON-RPC response(s).
+ *         description: JSON-RPC response.
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
- *                 - type: object
- *                   properties:
- *                     jsonrpc:
- *                       type: string
- *                     id:
- *                       oneOf:
- *                         - type: string
- *                         - type: number
- *                     result:
- *                       type: object
- *                     error:
- *                       type: object
- *                 - type: array
- *                   items:
- *                     type: object
+ *               type: object
+ *               properties:
+ *                 jsonrpc:
+ *                   type: string
+ *                 id:
+ *                   oneOf:
+ *                     - type: string
+ *                     - type: number
+ *                 result:
+ *                   type: object
+ *                 error:
+ *                   type: object
  *       204:
  *         description: Notification processed (no response body).
  *       400:
@@ -227,11 +228,15 @@ export async function POST(request: Request) {
 
     const sessionHash = await computeSessionHashFromRequest(request);
     const country = extractCountry(request.headers);
+    // Optional method hint (2026-07-28 spec); never required for compatibility
+    const mcpMethod = request.headers.get("mcp-method") ?? undefined;
 
     // Handle batch requests
     if (Array.isArray(parsed)) {
       const responses = await Promise.all(
-        parsed.map((message) => handleMessage(message, sessionHash, country)),
+        parsed.map((message) =>
+          handleMessage(message, sessionHash, country, mcpMethod),
+        ),
       );
 
       // Filter out null responses (notifications)
@@ -252,7 +257,7 @@ export async function POST(request: Request) {
     }
 
     // Handle single request
-    const response = await handleJsonMessage(body, sessionHash, country);
+    const response = await handleJsonMessage(body, sessionHash, country, mcpMethod);
 
     if (response === null) {
       // Notification - no response needed
