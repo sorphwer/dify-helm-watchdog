@@ -951,11 +951,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   const lastSync = formatDateParts(data?.updateTime);
-  const upgradePlanParams = new URLSearchParams(searchParams.toString());
-  upgradePlanParams.set("upgrade-plan", "true");
-  upgradePlanParams.delete("from");
-  upgradePlanParams.delete("to");
-  const upgradePlanHref = `/?${upgradePlanParams.toString()}`;
+  const openUpgradePlan = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("upgrade-plan", "true");
+    url.searchParams.delete("from");
+    url.searchParams.delete("to");
+    window.history.pushState(null, "", url);
+  };
   const upgradePlanOpen =
     searchParams.has("upgrade-plan") &&
     searchParams.get("upgrade-plan") !== "false";
@@ -1031,9 +1033,9 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             </span>
           </Link>
 
-          <Link
-            href={upgradePlanHref}
-            scroll={false}
+          <button
+            type="button"
+            onClick={openUpgradePlan}
             className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
           >
             <div className="flex flex-col leading-tight">
@@ -1051,7 +1053,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors group-hover:bg-accent group-hover:text-foreground">
               <ArrowUpRight className="h-5 w-5" />
             </span>
-          </Link>
+          </button>
 
           <button
             type="button"

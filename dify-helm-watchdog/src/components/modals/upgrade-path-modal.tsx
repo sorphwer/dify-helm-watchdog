@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowUpRight, FileCode2, MapPinned } from "lucide-react";
 import {
   Dialog,
@@ -128,9 +128,7 @@ function PathResult({ result }: { result: UpgradePathResult }) {
 }
 
 export default function UpgradePathModal({ open }: UpgradePathModalProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const [isNavigating, startTransition] = useTransition();
   const [versions, setVersions] = useState<string[]>([]);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsError, setOptionsError] = useState<string | null>(null);
@@ -201,28 +199,24 @@ export default function UpgradePathModal({ open }: UpgradePathModalProps) {
   }, [from, open, to]);
 
   const replaceQuery = (next: { from: string | null; to: string | null }) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("upgrade-plan", "true");
-    if (next.from) params.set("from", next.from);
-    else params.delete("from");
-    if (next.to) params.set("to", next.to);
-    else params.delete("to");
-
-    startTransition(() => {
-      router.replace(`/?${params.toString()}`, { scroll: false });
-    });
+    const url = new URL(window.location.href);
+    url.searchParams.set("upgrade-plan", "true");
+    if (next.from) url.searchParams.set("from", next.from);
+    else url.searchParams.delete("from");
+    if (next.to) url.searchParams.set("to", next.to);
+    else url.searchParams.delete("to");
+    window.history.replaceState(null, "", url);
   };
 
   const close = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("upgrade-plan");
-    params.delete("from");
-    params.delete("to");
-    const query = params.toString();
-    router.replace(query ? `/?${query}` : "/", { scroll: false });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("upgrade-plan");
+    url.searchParams.delete("from");
+    url.searchParams.delete("to");
+    window.history.replaceState(null, "", url);
   };
 
-  const busy = optionsLoading || isNavigating;
+  const busy = optionsLoading;
   const errorMessage = optionsError ?? resultError;
 
   return (
