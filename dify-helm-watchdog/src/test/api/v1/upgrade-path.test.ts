@@ -1,4 +1,5 @@
 import { GET } from "@/app/api/v1/upgrade-path/route";
+import { GET as GET_OPTIONS } from "@/app/api/v1/upgrade-path/options/route";
 import { EE_CATALOG_URL } from "@/lib/ee-catalog";
 
 const makeRelease = (version: string, unskippable: boolean) => ({
@@ -80,6 +81,28 @@ describe("GET /api/v1/upgrade-path", () => {
     ]);
     expect(payload.hops[2]).toMatchObject({ version: "v3.11.1", isTarget: true });
     expect(payload.notes).toEqual([]);
+  });
+
+  it("lists catalog versions newest first for the modal picker", async () => {
+    serveCatalog({ ok: true });
+
+    const request = new Request(
+      "http://localhost/api/v1/upgrade-path/options",
+    );
+    const response = await GET_OPTIONS(request);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, s-maxage=3600, stale-while-revalidate=86400",
+    );
+    const payload = (await response.json()) as { versions: string[] };
+    expect(payload.versions).toEqual([
+      "v3.11.1",
+      "v3.11.0",
+      "v3.10.0",
+      "v3.9.5",
+      "v3.9.0",
+    ]);
   });
 
   it("returns 400 when the 'to' parameter is missing", async () => {

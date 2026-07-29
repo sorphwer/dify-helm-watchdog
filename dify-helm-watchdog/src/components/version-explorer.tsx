@@ -41,6 +41,7 @@ import ValuesWizardModal from "@/components/modals/values-wizard-modal";
 import DiffComparisonModal from "@/components/modals/diff-comparison-modal";
 import McpConfigModal from "@/components/modals/mcp-config-modal";
 import WorkflowLogsModal from "@/components/modals/workflow-logs-modal";
+import UpgradePathModal from "@/components/modals/upgrade-path-modal";
 import { parseSidebarMd } from "@/lib/version-status";
 import DOMPurify from "isomorphic-dompurify";
 
@@ -950,6 +951,14 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
     diffActiveTabId === "images" ? diffImagesContent : diffValuesContent;
 
   const lastSync = formatDateParts(data?.updateTime);
+  const upgradePlanParams = new URLSearchParams(searchParams.toString());
+  upgradePlanParams.set("upgrade-plan", "true");
+  upgradePlanParams.delete("from");
+  upgradePlanParams.delete("to");
+  const upgradePlanHref = `/?${upgradePlanParams.toString()}`;
+  const upgradePlanOpen =
+    searchParams.has("upgrade-plan") &&
+    searchParams.get("upgrade-plan") !== "false";
 
   return (
     <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
@@ -1023,7 +1032,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
           </Link>
 
           <Link
-            href="/upgrade-path"
+            href={upgradePlanHref}
+            scroll={false}
             className="group flex min-h-[64px] items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/10"
           >
             <div className="flex flex-col leading-tight">
@@ -1514,6 +1524,8 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
         imageTagMap={imageTagMap}
         templateValuesYaml={valuesContent}
       />
+
+      <UpgradePathModal open={upgradePlanOpen} />
 
       <McpConfigModal
         open={mcpModalOpen}
