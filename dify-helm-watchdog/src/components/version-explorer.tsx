@@ -1194,12 +1194,13 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                           >
                             {version.appVersion && (
                               <span
+                                title="Community Edition"
                                 className={`text-[10px] font-semibold tracking-normal ${isActive
                                     ? "text-primary-foreground"
                                     : "text-muted-foreground"
                                   }`}
                               >
-                                App {version.appVersion}
+                                CE {version.appVersion}
                               </span>
                             )}
                             {versionStatusMap.get(version.version) === "non-skippable" && (
