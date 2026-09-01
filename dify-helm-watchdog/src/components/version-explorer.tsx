@@ -1193,14 +1193,26 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               }`}
                           >
                             {version.appVersion && (
-                              <span
-                                title="Community Edition"
-                                className={`text-[10px] font-semibold tracking-normal ${isActive
-                                    ? "text-primary-foreground"
-                                    : "text-muted-foreground"
-                                  }`}
-                              >
-                                CE {version.appVersion}
+                              <span className="group/ce relative inline-flex cursor-help items-start">
+                                <span
+                                  className={`text-[10px] font-semibold tracking-normal ${isActive
+                                      ? "text-primary-foreground"
+                                      : "text-muted-foreground"
+                                    }`}
+                                >
+                                  CE {version.appVersion}
+                                </span>
+                                <span
+                                  className={`-mt-0.5 ml-0.5 text-[7px] font-bold leading-none tracking-normal ${isActive
+                                      ? "text-primary-foreground/80"
+                                      : "text-muted-foreground/80"
+                                    }`}
+                                >
+                                  ?
+                                </span>
+                                <span className="pointer-events-none absolute -top-6 left-0 z-20 whitespace-nowrap rounded-md bg-foreground px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-background opacity-0 shadow-sm transition-opacity duration-150 group-hover/ce:opacity-100">
+                                  Community Edition
+                                </span>
                               </span>
                             )}
                             {versionStatusMap.get(version.version) === "non-skippable" && (
