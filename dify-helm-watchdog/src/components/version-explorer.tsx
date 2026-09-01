@@ -1211,7 +1211,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                                   ?
                                 </span>
                                 <span className="pointer-events-none absolute -top-6 left-0 z-20 whitespace-nowrap rounded-md bg-foreground px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-background opacity-0 shadow-sm transition-opacity duration-150 group-hover/ce:opacity-100">
-                                  Community Edition
+                                  Community Edition v{version.appVersion} powers the app core of this EE release
                                 </span>
                               </span>
                             )}
