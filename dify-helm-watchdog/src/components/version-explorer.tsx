@@ -1210,7 +1210,7 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                                 >
                                   ?
                                 </span>
-                                <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 w-max max-w-[16rem] rounded-md bg-foreground px-2 py-0.5 text-[10px] font-medium normal-case leading-snug tracking-normal text-background opacity-0 shadow-sm transition-opacity duration-150 group-hover/ce:opacity-100">
+                                <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 w-max max-w-[16rem] rounded-md border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-medium normal-case leading-snug tracking-normal text-foreground opacity-0 shadow-lg backdrop-blur-md backdrop-saturate-150 transition-opacity duration-150 group-hover/ce:opacity-100">
                                   Community Edition v{version.appVersion} powers the app core of this EE release
                                 </span>
                               </span>
