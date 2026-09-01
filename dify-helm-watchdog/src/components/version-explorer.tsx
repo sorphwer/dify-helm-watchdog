@@ -1193,13 +1193,26 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
                               }`}
                           >
                             {version.appVersion && (
-                              <span
-                                className={`text-[10px] font-semibold tracking-normal ${isActive
-                                    ? "text-primary-foreground"
-                                    : "text-muted-foreground"
-                                  }`}
-                              >
-                                App {version.appVersion}
+                              <span className="group/ce relative inline-flex cursor-help items-start">
+                                <span
+                                  className={`text-[10px] font-semibold tracking-normal ${isActive
+                                      ? "text-primary-foreground"
+                                      : "text-muted-foreground"
+                                    }`}
+                                >
+                                  CE {version.appVersion}
+                                </span>
+                                <span
+                                  className={`-mt-0.5 ml-0.5 text-[7px] font-bold leading-none tracking-normal ${isActive
+                                      ? "text-primary-foreground/80"
+                                      : "text-muted-foreground/80"
+                                    }`}
+                                >
+                                  ?
+                                </span>
+                                <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 w-max max-w-[16rem] rounded-md border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-medium normal-case leading-snug tracking-normal text-foreground opacity-0 shadow-lg backdrop-blur-md backdrop-saturate-150 transition-opacity duration-150 group-hover/ce:opacity-100">
+                                  Community Edition v{version.appVersion} powers the app core of this EE release
+                                </span>
                               </span>
                             )}
                             {versionStatusMap.get(version.version) === "non-skippable" && (
