@@ -167,7 +167,7 @@ describe("POST /api/v1/mcp — MCP Streamable HTTP", () => {
           createTime: "2026-01-01T00:00:00.000Z",
           digest: "sha256:abc",
           status: null,
-        } as CachePayload["versions"][number],
+        } as unknown as CachePayload["versions"][number],
       ],
     };
     mockedLoadCache.mockResolvedValue(cache);
