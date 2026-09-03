@@ -394,6 +394,28 @@ describe("POST /api/v1/cron", () => {
     expect(mockedAfter).toHaveBeenCalledTimes(1);
   });
 
+  it("should report a failed status when after() cannot be registered", async () => {
+    mockedAfter.mockImplementationOnce(() => {
+      throw new Error("`after` was called outside a request scope");
+    });
+
+    const request = new Request("http://localhost/api/v1/cron", {
+      method: "POST",
+      headers: {
+        "x-vercel-cron": "true",
+      },
+    });
+
+    const response = await POST(request);
+    const text = await streamToText(response);
+
+    expect(text).toContain(
+      "[error] `after` was called outside a request scope",
+    );
+    expect(text).toContain("[status] failed");
+    expect(mockedSyncHelmData).not.toHaveBeenCalled();
+  });
+
   it("should normalize version parameter by removing v prefix", async () => {
     let capturedOptions: { forceVersions?: string[] } = {};
 

@@ -160,31 +160,31 @@ const createStreamResponse = (request: Request) => {
         write("[input] mirror_only=true");
       }
 
-      // Next flushes pending revalidations right after the handler returns
-      // its Response, which for this streaming route is before the sync has
-      // even started, so revalidateTag() called from the stream body only
-      // queues tags that nobody flushes. after() runs when the response
-      // closes and flushes whatever it queued -- but only if it was
-      // registered before the close. Register it up front: if the client
-      // disconnects mid-sync the close fires early, and an after() added
-      // later would never run. Revalidating an unchanged manifest on a
-      // failed sync just costs one extra R2 read.
-      after(() => {
-        revalidateTag(HELM_CACHE_TAG);
-        revalidatePath("/", "page");
-      });
-      write(
-        "[revalidate] Cache revalidation scheduled; it runs when this log stream closes",
-      );
-
-      if (pauseSeconds > 0) {
-        write(`[input] pause=${pauseSeconds}s`);
-        await sleepWithHeartbeat(pauseSeconds, write);
-      }
-
       let statusLine = "[status] ok";
 
       try {
+        // Next flushes pending revalidations right after the handler returns
+        // its Response, which for this streaming route is before the sync
+        // has even started, so revalidateTag() called from the stream body
+        // only queues tags that nobody flushes. after() runs when the
+        // response closes and flushes whatever it queued -- but only if it
+        // was registered before the close. Register it first: if the client
+        // disconnects during the pause or the sync, the close fires early
+        // and an after() added later would never run. Revalidating an
+        // unchanged manifest on a failed sync just costs one extra R2 read.
+        after(() => {
+          revalidateTag(HELM_CACHE_TAG);
+          revalidatePath("/", "page");
+        });
+        write(
+          "[revalidate] Cache revalidation scheduled; it runs when this log stream closes",
+        );
+
+        if (pauseSeconds > 0) {
+          write(`[input] pause=${pauseSeconds}s`);
+          await sleepWithHeartbeat(pauseSeconds, write);
+        }
+
         const syncResult: SyncResult = await syncHelmData({
           log: (message) => write(`[sync] ${message}`),
           mirrorOnly,

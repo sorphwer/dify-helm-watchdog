@@ -18,7 +18,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 |--------|-----------|------------|----------------|
 | API v1 Versions | `versions.test.ts` | 3 | Version listing, validation aggregation |
 | API v1 Cache | `cache.test.ts` | 6 | Cache retrieval, inline content handling |
-| API v1 Cron | `cron.test.ts` | 14 | Sync operations, authentication, streaming |
+| API v1 Cron | `cron.test.ts` | 15 | Sync operations, authentication, streaming |
 | API v1 Latest Version | `latest.test.ts` | 6 | Latest version retrieval, error handling |
 | API v1 Version Details | `[version]/route.test.ts` | 6 | Version details, asset URLs |
 | API v1 Version Images | `[version]/images.test.ts` | 9 | Image listing, YAML format, validation |
@@ -188,6 +188,11 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
     - **Scenario:** `syncHelmData` rejects, or the client disconnects mid-sync
     - **Expected:** `after()` is registered before the sync starts and still exactly once on failure
     - **Validates:** An early response close cannot outrun the registration; re-reading an unchanged manifest is the accepted cost
+
+16. **Revalidation Registration Failure**
+    - **Scenario:** `after()` throws (e.g. called outside a request scope)
+    - **Expected:** Stream ends with `[error] ...` and `[status] failed`; the sync is not started
+    - **Validates:** Registration runs inside the try so failures surface in the log instead of erroring the stream
 
 **Response Format:**
 - Content-Type: `text/plain; charset=utf-8`
