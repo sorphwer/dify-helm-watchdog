@@ -140,6 +140,15 @@ const createStreamResponse = (request: Request) => {
     : 0;
   const mirrorOnly = url.searchParams.get("mirrorOnly") === "true";
 
+  // Next flushes revalidations queued by the handler right after it returns
+  // the Response -- before this streaming sync has even started -- so calling
+  // revalidateTag() from the stream body was a no-op. after() runs when the
+  // response closes, once the sync is done. Registered here rather than in
+  // the stream so an early client disconnect cannot race the registration.
+  after(() => {
+    revalidateTag(HELM_CACHE_TAG);
+    revalidatePath("/", "page");
+  });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -159,32 +168,16 @@ const createStreamResponse = (request: Request) => {
       if (mirrorOnly) {
         write("[input] mirror_only=true");
       }
+      write("[revalidate] Cache revalidation runs when this log stream closes");
+
+      if (pauseSeconds > 0) {
+        write(`[input] pause=${pauseSeconds}s`);
+        await sleepWithHeartbeat(pauseSeconds, write);
+      }
 
       let statusLine = "[status] ok";
 
       try {
-        // Next flushes pending revalidations right after the handler returns
-        // its Response, which for this streaming route is before the sync
-        // has even started, so revalidateTag() called from the stream body
-        // only queues tags that nobody flushes. after() runs when the
-        // response closes and flushes whatever it queued -- but only if it
-        // was registered before the close. Register it first: if the client
-        // disconnects during the pause or the sync, the close fires early
-        // and an after() added later would never run. Revalidating an
-        // unchanged manifest on a failed sync just costs one extra R2 read.
-        after(() => {
-          revalidateTag(HELM_CACHE_TAG);
-          revalidatePath("/", "page");
-        });
-        write(
-          "[revalidate] Cache revalidation scheduled; it runs when this log stream closes",
-        );
-
-        if (pauseSeconds > 0) {
-          write(`[input] pause=${pauseSeconds}s`);
-          await sleepWithHeartbeat(pauseSeconds, write);
-        }
-
         const syncResult: SyncResult = await syncHelmData({
           log: (message) => write(`[sync] ${message}`),
           mirrorOnly,

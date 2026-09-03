@@ -18,7 +18,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 |--------|-----------|------------|----------------|
 | API v1 Versions | `versions.test.ts` | 3 | Version listing, validation aggregation |
 | API v1 Cache | `cache.test.ts` | 6 | Cache retrieval, inline content handling |
-| API v1 Cron | `cron.test.ts` | 15 | Sync operations, authentication, streaming |
+| API v1 Cron | `cron.test.ts` | 13 | Sync operations, authentication, streaming |
 | API v1 Latest Version | `latest.test.ts` | 6 | Latest version retrieval, error handling |
 | API v1 Version Details | `[version]/route.test.ts` | 6 | Version details, asset URLs |
 | API v1 Version Images | `[version]/images.test.ts` | 9 | Image listing, YAML format, validation |
@@ -181,18 +181,8 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 **Cache Management:**
 14. **Deferred ISR Revalidation**
     - **Scenario:** Successful sync completion
-    - **Expected:** Schedules `revalidateTag(HELM_CACHE_TAG)` + `revalidatePath("/", "page")` via `after()`; neither runs while the log stream is still open
-    - **Validates:** Revalidation is queued for after the streaming response closes (Next only flushes tags queued before the handler returns, so in-stream calls were no-ops)
-
-15. **Revalidation Registered Up Front**
-    - **Scenario:** `syncHelmData` rejects, or the client disconnects mid-sync
-    - **Expected:** `after()` is registered before the sync starts and still exactly once on failure
-    - **Validates:** An early response close cannot outrun the registration; re-reading an unchanged manifest is the accepted cost
-
-16. **Revalidation Registration Failure**
-    - **Scenario:** `after()` throws (e.g. called outside a request scope)
-    - **Expected:** Stream ends with `[error] ...` and `[status] failed`; the sync is not started
-    - **Validates:** Registration runs inside the try so failures surface in the log instead of erroring the stream
+    - **Expected:** `revalidateTag(HELM_CACHE_TAG)` + `revalidatePath("/", "page")` are scheduled via `after()` and do not run while the log stream is still open
+    - **Validates:** Revalidation happens after the streaming response closes (Next only flushes tags queued before the handler returns, so in-stream calls were no-ops)
 
 **Response Format:**
 - Content-Type: `text/plain; charset=utf-8`

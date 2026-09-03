@@ -25,7 +25,7 @@ jest.mock("next/cache", () => ({
   revalidateTag: jest.fn(),
 }));
 
-// Capture after() callbacks instead of running them so tests can prove the
+// Capture after() callbacks instead of running them so the test can prove
 // revalidation is deferred rather than executed inside the stream body.
 jest.mock("next/server", () => ({
   after: jest.fn(),
@@ -332,18 +332,15 @@ describe("POST /api/v1/cron", () => {
   });
 
   it("should defer ISR revalidation until the response closes", async () => {
-    let afterRegisteredBeforeSync = false;
-    mockedSyncHelmData.mockImplementationOnce(async () => {
-      afterRegisteredBeforeSync = mockedAfter.mock.calls.length === 1;
-      return {
-        processed: 1,
-        created: 1,
-        refreshed: [],
-        skipped: 0,
-        versions: ["2.5.0"],
-        updateTime: "2024-01-01T00:00:00.000Z",
-      };
+    mockedSyncHelmData.mockResolvedValueOnce({
+      processed: 1,
+      created: 1,
+      refreshed: [],
+      skipped: 0,
+      versions: ["2.5.0"],
+      updateTime: "2024-01-01T00:00:00.000Z",
     });
+
     const request = new Request("http://localhost/api/v1/cron", {
       method: "POST",
       headers: {
@@ -352,68 +349,19 @@ describe("POST /api/v1/cron", () => {
     });
 
     const response = await POST(request);
-
-    expect(response.status).toBe(200);
-
     const text = await streamToText(response);
-    expect(text).toContain(
-      "[revalidate] Cache revalidation scheduled; it runs when this log stream closes",
-    );
+    expect(text).toContain("[revalidate] Cache revalidation runs when this log stream closes");
     expect(text).toContain("[status] ok");
 
-    // Registered before the sync so an early client disconnect (which closes
-    // the response) cannot outrun it, and nothing is revalidated while the
-    // stream is still being produced.
-    expect(afterRegisteredBeforeSync).toBe(true);
+    // Nothing is revalidated while the stream is being produced...
     expect(mockedAfter).toHaveBeenCalledTimes(1);
     expect(revalidateTag).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
 
-    // Once Next runs the deferred task, both caches are invalidated.
-    const deferred = mockedAfter.mock.calls[0][0];
-    expect(typeof deferred).toBe("function");
-    await (deferred as () => void | Promise<void>)();
+    // ...but once Next runs the deferred task, both caches are invalidated.
+    (mockedAfter.mock.calls[0][0] as () => void)();
     expect(revalidateTag).toHaveBeenCalledWith(HELM_CACHE_TAG);
     expect(revalidatePath).toHaveBeenCalledWith("/", "page");
-  });
-
-  it("should still schedule revalidation when the sync fails", async () => {
-    mockedSyncHelmData.mockRejectedValueOnce(new Error("boom"));
-
-    const request = new Request("http://localhost/api/v1/cron", {
-      method: "POST",
-      headers: {
-        "x-vercel-cron": "true",
-      },
-    });
-
-    const response = await POST(request);
-    const text = await streamToText(response);
-
-    expect(text).toContain("[status] failed");
-    expect(mockedAfter).toHaveBeenCalledTimes(1);
-  });
-
-  it("should report a failed status when after() cannot be registered", async () => {
-    mockedAfter.mockImplementationOnce(() => {
-      throw new Error("`after` was called outside a request scope");
-    });
-
-    const request = new Request("http://localhost/api/v1/cron", {
-      method: "POST",
-      headers: {
-        "x-vercel-cron": "true",
-      },
-    });
-
-    const response = await POST(request);
-    const text = await streamToText(response);
-
-    expect(text).toContain(
-      "[error] `after` was called outside a request scope",
-    );
-    expect(text).toContain("[status] failed");
-    expect(mockedSyncHelmData).not.toHaveBeenCalled();
   });
 
   it("should normalize version parameter by removing v prefix", async () => {

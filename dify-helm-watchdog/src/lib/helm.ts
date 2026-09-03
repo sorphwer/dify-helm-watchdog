@@ -1112,11 +1112,9 @@ export const syncHelmData = async (
     log(`Local mode: limiting to latest ${maxVersionsToProcess} versions (${indexEntries.length} total available)`);
   }
   
-  // loadCache() swallows storage errors so pages can fall back to an empty
-  // state. The sync must not: a transient read failure would look like a first
-  // run, and the final persist would then overwrite cache.json with only the
-  // versions touched in this run. Null here means cache.json genuinely does not
-  // exist yet; any other failure propagates and aborts the sync.
+  // Not loadCache(): it swallows storage errors, and a swallowed read here
+  // would look like a first run and overwrite cache.json with only this run's
+  // versions. Null means the manifest genuinely does not exist yet.
   const localCache = await readLocalCache();
   const cache = localCache
     ? sanitizeCachePayload(localCache)
