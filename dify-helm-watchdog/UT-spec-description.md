@@ -184,10 +184,10 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
     - **Expected:** Schedules `revalidateTag(HELM_CACHE_TAG)` + `revalidatePath("/", "page")` via `after()`; neither runs while the log stream is still open
     - **Validates:** Revalidation is queued for after the streaming response closes (Next only flushes tags queued before the handler returns, so in-stream calls were no-ops)
 
-15. **No Revalidation On Failure**
-    - **Scenario:** `syncHelmData` rejects
-    - **Expected:** `after()` is never called
-    - **Validates:** Failed syncs do not evict a still-valid cache
+15. **Revalidation Registered Up Front**
+    - **Scenario:** `syncHelmData` rejects, or the client disconnects mid-sync
+    - **Expected:** `after()` is registered before the sync starts and still exactly once on failure
+    - **Validates:** An early response close cannot outrun the registration; re-reading an unchanged manifest is the accepted cost
 
 **Response Format:**
 - Content-Type: `text/plain; charset=utf-8`

@@ -160,6 +160,22 @@ const createStreamResponse = (request: Request) => {
         write("[input] mirror_only=true");
       }
 
+      // Next flushes pending revalidations right after the handler returns
+      // its Response, which for this streaming route is before the sync has
+      // even started, so revalidateTag() called from the stream body only
+      // queues tags that nobody flushes. after() runs when the response
+      // closes and flushes whatever it queued -- but only if it was
+      // registered before the close. Register it up front: if the client
+      // disconnects mid-sync the close fires early, and an after() added
+      // later would never run. Revalidating an unchanged manifest on a
+      // failed sync just costs one extra R2 read.
+      after(() => {
+        revalidateTag(HELM_CACHE_TAG);
+        revalidatePath("/", "page");
+      });
+      write(
+        "[revalidate] Cache revalidation scheduled; it runs when this log stream closes",
+      );
 
       if (pauseSeconds > 0) {
         write(`[input] pause=${pauseSeconds}s`);
@@ -197,19 +213,6 @@ const createStreamResponse = (request: Request) => {
           write("[result] no cached versions refreshed");
         }
         write(`[result] update_time=${syncResult.updateTime ?? "unknown"}`);
-
-        // Next flushes pending revalidations right after the handler returns
-        // its Response, which for this streaming route is before the sync has
-        // even started. Calling revalidateTag() from inside the stream body
-        // therefore only queues tags that nobody ever flushes. after() runs
-        // once the stream closes and flushes whatever it queued.
-        after(() => {
-          revalidateTag(HELM_CACHE_TAG);
-          revalidatePath("/", "page");
-        });
-        write(
-          "[revalidate] Cache revalidation scheduled; it runs when this log stream closes",
-        );
       } catch (error) {
         statusLine = "[status] failed";
 

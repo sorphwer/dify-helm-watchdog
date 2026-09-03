@@ -332,15 +332,18 @@ describe("POST /api/v1/cron", () => {
   });
 
   it("should defer ISR revalidation until the response closes", async () => {
-    mockedSyncHelmData.mockResolvedValueOnce({
-      processed: 1,
-      created: 1,
-      refreshed: [],
-      skipped: 0,
-      versions: ["2.5.0"],
-      updateTime: "2024-01-01T00:00:00.000Z",
+    let afterRegisteredBeforeSync = false;
+    mockedSyncHelmData.mockImplementationOnce(async () => {
+      afterRegisteredBeforeSync = mockedAfter.mock.calls.length === 1;
+      return {
+        processed: 1,
+        created: 1,
+        refreshed: [],
+        skipped: 0,
+        versions: ["2.5.0"],
+        updateTime: "2024-01-01T00:00:00.000Z",
+      };
     });
-
     const request = new Request("http://localhost/api/v1/cron", {
       method: "POST",
       headers: {
@@ -358,7 +361,10 @@ describe("POST /api/v1/cron", () => {
     );
     expect(text).toContain("[status] ok");
 
-    // Nothing is revalidated while the stream is still being produced.
+    // Registered before the sync so an early client disconnect (which closes
+    // the response) cannot outrun it, and nothing is revalidated while the
+    // stream is still being produced.
+    expect(afterRegisteredBeforeSync).toBe(true);
     expect(mockedAfter).toHaveBeenCalledTimes(1);
     expect(revalidateTag).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -371,7 +377,7 @@ describe("POST /api/v1/cron", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/", "page");
   });
 
-  it("should not schedule revalidation when the sync fails", async () => {
+  it("should still schedule revalidation when the sync fails", async () => {
     mockedSyncHelmData.mockRejectedValueOnce(new Error("boom"));
 
     const request = new Request("http://localhost/api/v1/cron", {
@@ -385,7 +391,7 @@ describe("POST /api/v1/cron", () => {
     const text = await streamToText(response);
 
     expect(text).toContain("[status] failed");
-    expect(mockedAfter).not.toHaveBeenCalled();
+    expect(mockedAfter).toHaveBeenCalledTimes(1);
   });
 
   it("should normalize version parameter by removing v prefix", async () => {
