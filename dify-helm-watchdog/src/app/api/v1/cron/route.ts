@@ -1,4 +1,5 @@
 import { revalidatePath, revalidateTag } from "next/cache";
+import { after } from "next/server";
 import { createErrorResponse } from "@/lib/api/response";
 import {
   HELM_CACHE_TAG,
@@ -139,6 +140,15 @@ const createStreamResponse = (request: Request) => {
     : 0;
   const mirrorOnly = url.searchParams.get("mirrorOnly") === "true";
 
+  // Next flushes revalidations queued by the handler right after it returns
+  // the Response -- before this streaming sync has even started -- so calling
+  // revalidateTag() from the stream body was a no-op. after() runs when the
+  // response closes, once the sync is done. Registered here rather than in
+  // the stream so an early client disconnect cannot race the registration.
+  after(() => {
+    revalidateTag(HELM_CACHE_TAG);
+    revalidatePath("/", "page");
+  });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -158,7 +168,7 @@ const createStreamResponse = (request: Request) => {
       if (mirrorOnly) {
         write("[input] mirror_only=true");
       }
-
+      write("[revalidate] Cache revalidation runs when this log stream closes");
 
       if (pauseSeconds > 0) {
         write(`[input] pause=${pauseSeconds}s`);
@@ -196,53 +206,6 @@ const createStreamResponse = (request: Request) => {
           write("[result] no cached versions refreshed");
         }
         write(`[result] update_time=${syncResult.updateTime ?? "unknown"}`);
-
-        write("[revalidate] Triggering ISR revalidation for homepage...");
-        try {
-          revalidateTag(HELM_CACHE_TAG);
-          revalidatePath("/", "page");
-          write("[revalidate] Successfully cleared ISR cache for homepage");
-
-          const shouldWarmup = process.env.ENABLE_CACHE_WARMUP !== "false";
-          if (shouldWarmup) {
-            write("[revalidate] Warming up cache...");
-            const baseUrl =
-              process.env.VERCEL_URL
-                ? `https://${process.env.VERCEL_URL}`
-                : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-
-            try {
-              const warmupUrl = `${baseUrl}/?_warmup=${Date.now()}`;
-              const warmupResponse = await fetch(warmupUrl, {
-                headers: {
-                  "User-Agent": "dify-helm-watchdog-cron",
-                  "Cache-Control": "no-cache, no-store, must-revalidate",
-                },
-                cache: "no-store",
-              });
-
-              if (warmupResponse.ok) {
-                write(
-                  `[revalidate] Cache warmed up successfully (status: ${warmupResponse.status})`,
-                );
-              } else {
-                write(
-                  `[revalidate] Warning: Warmup returned status ${warmupResponse.status}`,
-                );
-              }
-            } catch (warmupError) {
-              write(
-                `[revalidate] Warning: Cache warmup failed - ${warmupError instanceof Error ? warmupError.message : "unknown error"}`,
-              );
-            }
-          } else {
-            write("[revalidate] Cache warmup disabled via ENABLE_CACHE_WARMUP=false");
-          }
-        } catch (revalError) {
-          write(
-            `[revalidate] Warning: Failed to trigger revalidation - ${revalError instanceof Error ? revalError.message : "unknown error"}`,
-          );
-        }
       } catch (error) {
         statusLine = "[status] failed";
 

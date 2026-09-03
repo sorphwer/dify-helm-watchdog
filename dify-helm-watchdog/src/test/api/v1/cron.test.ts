@@ -5,6 +5,7 @@ import {
   syncHelmData,
 } from "@/lib/helm";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { after } from "next/server";
 
 jest.mock("@/lib/helm", () => ({
   syncHelmData: jest.fn(),
@@ -24,6 +25,14 @@ jest.mock("next/cache", () => ({
   revalidateTag: jest.fn(),
 }));
 
+// Capture after() callbacks instead of running them so the test can prove
+// revalidation is deferred rather than executed inside the stream body.
+jest.mock("next/server", () => ({
+  after: jest.fn(),
+}));
+
+const mockedAfter = after as jest.MockedFunction<typeof after>;
+
 const mockedSyncHelmData = syncHelmData as jest.MockedFunction<typeof syncHelmData>;
 
 describe("POST /api/v1/cron", () => {
@@ -33,9 +42,6 @@ describe("POST /api/v1/cron", () => {
     jest.resetModules();
     process.env = { ...originalEnv };
     delete process.env.CRON_API_KEY;
-    process.env.ENABLE_CACHE_WARMUP = "false";
-    delete process.env.VERCEL_URL;
-    delete process.env.NEXT_PUBLIC_SITE_URL;
   });
 
   afterEach(() => {
@@ -325,7 +331,7 @@ describe("POST /api/v1/cron", () => {
     expect(text).toContain("[status] failed");
   });
 
-  it("should trigger ISR revalidation on success", async () => {
+  it("should defer ISR revalidation until the response closes", async () => {
     mockedSyncHelmData.mockResolvedValueOnce({
       processed: 1,
       created: 1,
@@ -343,121 +349,19 @@ describe("POST /api/v1/cron", () => {
     });
 
     const response = await POST(request);
-
-    expect(response.status).toBe(200);
-
     const text = await streamToText(response);
-    expect(text).toContain("[revalidate] Triggering ISR revalidation for homepage...");
-    expect(text).toContain("[revalidate] Successfully cleared ISR cache for homepage");
+    expect(text).toContain("[revalidate] Cache revalidation runs when this log stream closes");
+    expect(text).toContain("[status] ok");
+
+    // Nothing is revalidated while the stream is being produced...
+    expect(mockedAfter).toHaveBeenCalledTimes(1);
+    expect(revalidateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+
+    // ...but once Next runs the deferred task, both caches are invalidated.
+    (mockedAfter.mock.calls[0][0] as () => void)();
     expect(revalidateTag).toHaveBeenCalledWith(HELM_CACHE_TAG);
     expect(revalidatePath).toHaveBeenCalledWith("/", "page");
-  });
-
-  it("should skip cache warmup when ENABLE_CACHE_WARMUP is false", async () => {
-    process.env.ENABLE_CACHE_WARMUP = "false";
-
-    mockedSyncHelmData.mockResolvedValueOnce({
-      processed: 1,
-      created: 1,
-      refreshed: [],
-      skipped: 0,
-      versions: ["2.5.0"],
-      updateTime: "2024-01-01T00:00:00.000Z",
-    });
-
-    const request = new Request("http://localhost/api/v1/cron", {
-      method: "POST",
-      headers: {
-        "x-vercel-cron": "true",
-      },
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-
-    const text = await streamToText(response);
-    expect(text).toContain(
-      "[revalidate] Cache warmup disabled via ENABLE_CACHE_WARMUP=false",
-    );
-  });
-
-  it("should attempt cache warmup when enabled", async () => {
-    process.env.ENABLE_CACHE_WARMUP = "true";
-    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
-
-    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-    } as Response);
-
-    mockedSyncHelmData.mockResolvedValueOnce({
-      processed: 1,
-      created: 1,
-      refreshed: [],
-      skipped: 0,
-      versions: ["2.5.0"],
-      updateTime: "2024-01-01T00:00:00.000Z",
-    });
-
-    const request = new Request("http://localhost/api/v1/cron", {
-      method: "POST",
-      headers: {
-        "x-vercel-cron": "true",
-      },
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-
-    const text = await streamToText(response);
-    expect(text).toContain("[revalidate] Warming up cache...");
-    expect(text).toContain("[revalidate] Cache warmed up successfully (status: 200)");
-    expect(fetchSpy).toHaveBeenCalledWith(
-      expect.stringContaining("http://localhost:3000/?_warmup="),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          "User-Agent": "dify-helm-watchdog-cron",
-        }),
-      }),
-    );
-  });
-
-  it("should handle warmup failure gracefully", async () => {
-    process.env.ENABLE_CACHE_WARMUP = "true";
-    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
-
-    const fetchSpy = jest
-      .spyOn(global, "fetch")
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      } as Response);
-
-    mockedSyncHelmData.mockResolvedValueOnce({
-      processed: 1,
-      created: 1,
-      refreshed: [],
-      skipped: 0,
-      versions: ["2.5.0"],
-      updateTime: "2024-01-01T00:00:00.000Z",
-    });
-
-    const request = new Request("http://localhost/api/v1/cron", {
-      method: "POST",
-      headers: {
-        "x-vercel-cron": "true",
-      },
-    });
-
-    const response = await POST(request);
-
-    expect(response.status).toBe(200);
-
-    const text = await streamToText(response);
-    expect(text).toContain("[revalidate] Warning: Warmup returned status 500");
-    expect(fetchSpy).toHaveBeenCalled();
   });
 
   it("should normalize version parameter by removing v prefix", async () => {

@@ -561,6 +561,5 @@ To use this MCP server with Dify's MCP plugin or other MCP-compatible clients, c
 
 - `CRON_API_KEY`: Enables Bearer token protection for `/api/v1/cron`.
 - `MAX_PAUSE_SECONDS`: Maximum accepted `pause` value (seconds). Default: `300`.
-- `ENABLE_CACHE_WARMUP`: Set to `false` to disable post-sync cache warmup. Default: enabled.
-- `NEXT_PUBLIC_SITE_URL`: Used for OpenAPI `servers[0].url` and cache warmup base URL.
-- `VERCEL_URL`: Used as base URL on Vercel if present.
+- `NEXT_PUBLIC_SITE_URL`: Used for OpenAPI `servers[0].url`.
+- `VERCEL_URL`: Used as OpenAPI base URL on Vercel if present.
