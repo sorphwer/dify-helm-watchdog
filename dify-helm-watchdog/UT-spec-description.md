@@ -18,7 +18,7 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
 |--------|-----------|------------|----------------|
 | API v1 Versions | `versions.test.ts` | 3 | Version listing, validation aggregation |
 | API v1 Cache | `cache.test.ts` | 6 | Cache retrieval, inline content handling |
-| API v1 Cron | `cron.test.ts` | 16 | Sync operations, authentication, streaming |
+| API v1 Cron | `cron.test.ts` | 14 | Sync operations, authentication, streaming |
 | API v1 Latest Version | `latest.test.ts` | 6 | Latest version retrieval, error handling |
 | API v1 Version Details | `[version]/route.test.ts` | 6 | Version details, asset URLs |
 | API v1 Version Images | `[version]/images.test.ts` | 9 | Image listing, YAML format, validation |
@@ -179,25 +179,15 @@ This document describes the comprehensive unit test coverage for the dify-helm-w
     - **Validates:** Fallback error handling
 
 **Cache Management:**
-14. **ISR Revalidation Trigger**
+14. **Deferred ISR Revalidation**
     - **Scenario:** Successful sync completion
-    - **Expected:** Calls `revalidatePath("/", "page")`
-    - **Validates:** Cache invalidation for homepage
+    - **Expected:** Schedules `revalidateTag(HELM_CACHE_TAG)` + `revalidatePath("/", "page")` via `after()`; neither runs while the log stream is still open
+    - **Validates:** Revalidation is queued for after the streaming response closes (Next only flushes tags queued before the handler returns, so in-stream calls were no-ops)
 
-15. **Cache Warmup Disabled**
-    - **Scenario:** ENABLE_CACHE_WARMUP=false
-    - **Expected:** Skips warmup, logs disabled message
-    - **Validates:** Feature flag respect
-
-16. **Cache Warmup Success**
-    - **Scenario:** ENABLE_CACHE_WARMUP enabled with NEXT_PUBLIC_SITE_URL
-    - **Expected:** Fetches homepage with warmup parameter
-    - **Validates:** URL construction, User-Agent header, status reporting
-
-17. **Cache Warmup Failure**
-    - **Scenario:** Warmup fetch returns non-200 status
-    - **Expected:** Logs warning but continues
-    - **Validates:** Graceful degradation
+15. **No Revalidation On Failure**
+    - **Scenario:** `syncHelmData` rejects
+    - **Expected:** `after()` is never called
+    - **Validates:** Failed syncs do not evict a still-valid cache
 
 **Response Format:**
 - Content-Type: `text/plain; charset=utf-8`

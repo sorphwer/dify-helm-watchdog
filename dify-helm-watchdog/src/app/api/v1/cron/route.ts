@@ -1,4 +1,5 @@
 import { revalidatePath, revalidateTag } from "next/cache";
+import { after } from "next/server";
 import { createErrorResponse } from "@/lib/api/response";
 import {
   HELM_CACHE_TAG,
@@ -197,52 +198,18 @@ const createStreamResponse = (request: Request) => {
         }
         write(`[result] update_time=${syncResult.updateTime ?? "unknown"}`);
 
-        write("[revalidate] Triggering ISR revalidation for homepage...");
-        try {
+        // Next flushes pending revalidations right after the handler returns
+        // its Response, which for this streaming route is before the sync has
+        // even started. Calling revalidateTag() from inside the stream body
+        // therefore only queues tags that nobody ever flushes. after() runs
+        // once the stream closes and flushes whatever it queued.
+        after(() => {
           revalidateTag(HELM_CACHE_TAG);
           revalidatePath("/", "page");
-          write("[revalidate] Successfully cleared ISR cache for homepage");
-
-          const shouldWarmup = process.env.ENABLE_CACHE_WARMUP !== "false";
-          if (shouldWarmup) {
-            write("[revalidate] Warming up cache...");
-            const baseUrl =
-              process.env.VERCEL_URL
-                ? `https://${process.env.VERCEL_URL}`
-                : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-
-            try {
-              const warmupUrl = `${baseUrl}/?_warmup=${Date.now()}`;
-              const warmupResponse = await fetch(warmupUrl, {
-                headers: {
-                  "User-Agent": "dify-helm-watchdog-cron",
-                  "Cache-Control": "no-cache, no-store, must-revalidate",
-                },
-                cache: "no-store",
-              });
-
-              if (warmupResponse.ok) {
-                write(
-                  `[revalidate] Cache warmed up successfully (status: ${warmupResponse.status})`,
-                );
-              } else {
-                write(
-                  `[revalidate] Warning: Warmup returned status ${warmupResponse.status}`,
-                );
-              }
-            } catch (warmupError) {
-              write(
-                `[revalidate] Warning: Cache warmup failed - ${warmupError instanceof Error ? warmupError.message : "unknown error"}`,
-              );
-            }
-          } else {
-            write("[revalidate] Cache warmup disabled via ENABLE_CACHE_WARMUP=false");
-          }
-        } catch (revalError) {
-          write(
-            `[revalidate] Warning: Failed to trigger revalidation - ${revalError instanceof Error ? revalError.message : "unknown error"}`,
-          );
-        }
+        });
+        write(
+          "[revalidate] Cache revalidation scheduled; it runs when this log stream closes",
+        );
       } catch (error) {
         statusLine = "[status] failed";
 

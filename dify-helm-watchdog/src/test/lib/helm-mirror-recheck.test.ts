@@ -13,6 +13,8 @@ const BLOB_BASE = "https://blob.test";
 
 // In-memory blob store shared by the storage mock. Keys are storage paths.
 const mockFiles = new Map<string, string>();
+// Storage paths whose HEAD should fail as if R2 were unreachable.
+const mockUnreadable = new Set<string>();
 
 const asset = (path: string): StoredAsset => ({
   path,
@@ -24,6 +26,7 @@ jest.mock("@/services/storage", () => ({
   createStorageService: () => ({
     ensureAccess: async () => {},
     read: async (path: string): Promise<HeadResult | null> => {
+      if (mockUnreadable.has(path)) throw new Error("R2 unavailable");
       if (!mockFiles.has(path)) return null;
       return {
         url: `${BLOB_BASE}/${path}`,
@@ -156,6 +159,7 @@ describe("syncHelmData mirror re-check for cached versions", () => {
 
   beforeEach(() => {
     mockFiles.clear();
+    mockUnreadable.clear();
   });
 
   it("flips a cached MISSING mirror status to FOUND once the mirror catches up", async () => {
@@ -221,5 +225,27 @@ describe("syncHelmData mirror re-check for cached versions", () => {
     expect(mockFiles.get("helm-watchdog/image-validation/2.8.0.json")).toBe(
       before,
     );
+  });
+
+  it("aborts without touching the manifest when the existing cache cannot be read", async () => {
+    seedCache("FOUND");
+    mirrorVersions = ["2.8.0"];
+    const before = mockFiles.get("helm-watchdog/cache.json");
+    mockUnreadable.add("helm-watchdog/cache.json");
+
+    await expect(syncHelmData({ mirrorOnly: true })).rejects.toThrow(
+      "R2 unavailable",
+    );
+
+    expect(mockFiles.get("helm-watchdog/cache.json")).toBe(before);
+  });
+
+  it("still treats a genuinely absent manifest as a first run", async () => {
+    mirrorVersions = ["2.8.0"];
+
+    const result = await syncHelmData({ mirrorOnly: true });
+
+    expect(result.processed).toBe(1);
+    expect(readStoredManifest().versions).toEqual([]);
   });
 });

@@ -968,7 +968,6 @@ const readCachedRemoteCache = unstable_cache(
 
 interface LoadCacheOptions {
   enrichInlineContent?: boolean;
-  fresh?: boolean;
 }
 
 export const loadCache = async (
@@ -984,9 +983,7 @@ export const loadCache = async (
         : sanitizedLocal;
     }
 
-    const sanitizedRemote = options.fresh
-      ? await readRemoteCache(true)
-      : await readCachedRemoteCache();
+    const sanitizedRemote = await readCachedRemoteCache();
     if (!sanitizedRemote) {
       return null;
     }
@@ -1115,7 +1112,15 @@ export const syncHelmData = async (
     log(`Local mode: limiting to latest ${maxVersionsToProcess} versions (${indexEntries.length} total available)`);
   }
   
-  const cache = await loadCache({ fresh: true });
+  // loadCache() swallows storage errors so pages can fall back to an empty
+  // state. The sync must not: a transient read failure would look like a first
+  // run, and the final persist would then overwrite cache.json with only the
+  // versions touched in this run. Null here means cache.json genuinely does not
+  // exist yet; any other failure propagates and aborts the sync.
+  const localCache = await readLocalCache();
+  const cache = localCache
+    ? sanitizeCachePayload(localCache)
+    : await readRemoteCache(true);
 
   const knownVersions = new Map<string, StoredVersion>(
     cache?.versions.map((entry) => [entry.version, entry]) ?? [],
