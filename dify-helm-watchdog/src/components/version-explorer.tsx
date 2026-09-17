@@ -43,7 +43,7 @@ import McpConfigModal from "@/components/modals/mcp-config-modal";
 import WorkflowLogsModal from "@/components/modals/workflow-logs-modal";
 import UpgradePathModal from "@/components/modals/upgrade-path-modal";
 import { parseSidebarMd } from "@/lib/version-status";
-import DOMPurify from "isomorphic-dompurify";
+import DOMPurify from "dompurify";
 
 // Diff viewer styles - 绿增红减配色
 const diffViewerStyles: ReactDiffViewerStylesOverride = {
@@ -369,8 +369,17 @@ export function VersionExplorer({ data }: VersionExplorerProps) {
   // dangerouslySetInnerHTML; sanitize both paths at the sink. ADD_ATTR keeps
   // target="_blank" (not in DOMPurify's default allowlist) so links open in
   // a new tab as rewriteEeLinks/buildFeedFallbackHtml intend.
+  // detailsHtml is only ever populated from client-side fetches, so on the
+  // server (no window, DOMPurify unsupported) this always sees "". Render
+  // nothing there rather than pass-through: DOMPurify returns the input
+  // unsanitized when unsupported, and pulling in jsdom to make it work broke
+  // ISR regeneration on Vercel (jsdom 29 -> ESM-only @exodus/bytes under
+  // require()).
   const sanitizedDetailsHtml = useMemo(
-    () => DOMPurify.sanitize(detailsHtml, { ADD_ATTR: ["target"] }),
+    () =>
+      DOMPurify.isSupported
+        ? DOMPurify.sanitize(detailsHtml, { ADD_ATTR: ["target"] })
+        : "",
     [detailsHtml],
   );
 
