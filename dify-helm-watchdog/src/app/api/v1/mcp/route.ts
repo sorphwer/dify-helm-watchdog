@@ -89,8 +89,9 @@ export async function GET(request: Request) {
  *       server keeps no protocol state between requests.
  *
  *       Available methods:
- *       - `initialize` - Negotiate protocol version and capabilities
- *       - `server/discover` - Server capabilities without a prior initialize
+ *       - `server/discover` - Stateless 2026-07-28 handshake: returns the
+ *         supported protocol versions and capabilities (DiscoverResult)
+ *       - `initialize` - Legacy handshake for 2025-11-25 and earlier clients
  *       - `ping` - Health check
  *       - `tools/list` - List available tools (includes cache hints)
  *       - `tools/call` - Execute a tool
@@ -126,14 +127,27 @@ export async function GET(request: Request) {
  *               params:
  *                 type: object
  *           examples:
+ *             discover:
+ *               summary: Discover server (2026-07-28 handshake)
+ *               value:
+ *                 jsonrpc: "2.0"
+ *                 id: 1
+ *                 method: server/discover
+ *                 params:
+ *                   _meta:
+ *                     io.modelcontextprotocol/protocolVersion: "2026-07-28"
+ *                     io.modelcontextprotocol/clientInfo:
+ *                       name: "example-client"
+ *                       version: "1.0.0"
+ *                     io.modelcontextprotocol/clientCapabilities: {}
  *             initialize:
- *               summary: Initialize session
+ *               summary: Initialize session (legacy handshake)
  *               value:
  *                 jsonrpc: "2.0"
  *                 id: 1
  *                 method: initialize
  *                 params:
- *                   protocolVersion: "2026-07-28"
+ *                   protocolVersion: "2025-11-25"
  *                   capabilities: {}
  *                   clientInfo:
  *                     name: "example-client"

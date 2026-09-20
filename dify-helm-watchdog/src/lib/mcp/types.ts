@@ -50,19 +50,50 @@ export interface McpCapabilities {
   };
 }
 
-export interface McpInitializeParams {
-  protocolVersion: string;
-  capabilities: Record<string, unknown>;
-  clientInfo: {
+/**
+ * `_meta` envelope carried on every request by 2026-07-28 clients. The legacy
+ * (2025-11-25 and earlier) `initialize` handshake puts the same information at
+ * the top level of `params` instead.
+ */
+export interface McpRequestMetaEnvelope {
+  "io.modelcontextprotocol/protocolVersion"?: string;
+  "io.modelcontextprotocol/clientInfo"?: {
     name: string;
     version: string;
   };
+  "io.modelcontextprotocol/clientCapabilities"?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface McpInitializeParams {
+  protocolVersion?: string;
+  capabilities?: Record<string, unknown>;
+  clientInfo?: {
+    name: string;
+    version: string;
+  };
+  _meta?: McpRequestMetaEnvelope;
 }
 
 export interface McpInitializeResult {
   protocolVersion: string;
   capabilities: McpCapabilities;
   serverInfo: McpServerInfo;
+}
+
+/** `_meta` attached to every result so 2026-07-28 clients can identify the server */
+export interface McpResultMeta {
+  "io.modelcontextprotocol/serverInfo": McpServerInfo;
+}
+
+/** Result of `server/discover` (2026-07-28 DiscoverResult) */
+export interface McpDiscoverResult {
+  resultType: "complete";
+  supportedVersions: string[];
+  capabilities: McpCapabilities;
+  ttlMs: number;
+  cacheScope: "public";
+  _meta: McpResultMeta;
 }
 
 // MCP Tool types
@@ -155,15 +186,31 @@ export interface McpListResourceTemplatesResult {
 }
 
 // Server constants
-/** Supported MCP protocol versions, newest first */
-export const MCP_SUPPORTED_PROTOCOL_VERSIONS = [
-  "2026-07-28",
+/**
+ * Protocol revisions negotiated through `server/discover` (stateless era).
+ * Clients on these revisions never send `initialize`.
+ */
+export const MCP_MODERN_PROTOCOL_VERSIONS = ["2026-07-28"] as const;
+/**
+ * Protocol revisions negotiated through the legacy `initialize` handshake,
+ * newest first. `initialize` must only ever answer with one of these: a
+ * 2026-era version in an `initialize` result is rejected by clients.
+ */
+export const MCP_LEGACY_PROTOCOL_VERSIONS = [
+  "2025-11-25",
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
 ] as const;
+/** All supported MCP protocol versions, newest first */
+export const MCP_SUPPORTED_PROTOCOL_VERSIONS = [
+  ...MCP_MODERN_PROTOCOL_VERSIONS,
+  ...MCP_LEGACY_PROTOCOL_VERSIONS,
+] as const;
 /** Default (newest) advertised protocol version */
 export const MCP_PROTOCOL_VERSION = MCP_SUPPORTED_PROTOCOL_VERSIONS[0];
+/** Newest version the legacy `initialize` handshake may answer with */
+export const MCP_LEGACY_PROTOCOL_VERSION = MCP_LEGACY_PROTOCOL_VERSIONS[0];
 /** Suggested cache TTL for tools/list and prompts/list results */
 export const MCP_LIST_CACHE_TTL_MS = 3_600_000;
 export const MCP_SERVER_NAME = "dify-helm-watchdog";
