@@ -465,7 +465,10 @@ POST /api/v1/mcp
 
 Processes JSON-RPC 2.0 messages according to the MCP protocol. The transport is a stateless Streamable HTTP endpoint — no session IDs or persistent connections are required.
 
-`initialize` negotiates the protocol version: if the client's requested `params.protocolVersion` is one of the supported versions (`2026-07-28`, `2025-06-18`, `2025-03-26`, `2024-11-05`), the server echoes it back; otherwise it responds with the default `2026-07-28`.
+Two handshakes are supported:
+
+- **`server/discover`** (protocol revision `2026-07-28`, stateless): returns a `DiscoverResult` — `{ resultType: "complete", supportedVersions: [...], capabilities, ttlMs, cacheScope, _meta: { "io.modelcontextprotocol/serverInfo": {...} } }`. The client picks the newest revision both sides support. Every result on this path carries `resultType: "complete"`.
+- **`initialize`** (legacy handshake, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`): if the client's requested `params.protocolVersion` (or `params._meta["io.modelcontextprotocol/protocolVersion"]`) is one of the legacy versions, the server echoes it back; otherwise it answers with `2025-11-25`. `initialize` never returns a 2026-era version, since legacy clients reject that.
 
 **Available methods:**
 

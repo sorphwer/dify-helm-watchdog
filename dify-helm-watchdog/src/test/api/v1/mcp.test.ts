@@ -20,7 +20,8 @@ jest.mock("@/lib/helm", () => ({
 const mockedTrack = trackEvent as jest.MockedFunction<typeof trackEvent>;
 const mockedLoadCache = loadCache as jest.MockedFunction<typeof loadCache>;
 
-const DEFAULT_PROTOCOL_VERSION = "2026-07-28";
+const MODERN_PROTOCOL_VERSION = "2026-07-28";
+const LEGACY_PROTOCOL_VERSION = "2025-11-25";
 
 interface JsonRpcResult {
   jsonrpc?: string;
@@ -58,7 +59,7 @@ describe("POST /api/v1/mcp — MCP Streamable HTTP", () => {
     jest.clearAllMocks();
   });
 
-  describe("initialize protocol negotiation", () => {
+  describe("initialize (legacy handshake, 2025-11-25 and earlier)", () => {
     it("echoes a supported client protocol version", async () => {
       const response = await postJson({
         jsonrpc: "2.0",
@@ -72,7 +73,27 @@ describe("POST /api/v1/mcp — MCP Streamable HTTP", () => {
       expect(payload.result?.protocolVersion).toBe("2025-06-18");
     });
 
-    it("falls back to the advertised version for an unsupported client version", async () => {
+    it("echoes 2025-11-25, the version new Claude Code sends on fallback", async () => {
+      const response = await postJson({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "claude-code", version: "2.1.278" },
+        },
+      });
+
+      const payload = (await response.json()) as JsonRpcResult;
+      expect(payload.result?.protocolVersion).toBe("2025-11-25");
+      expect(payload.result?.capabilities).toMatchObject({ tools: {} });
+      expect(payload.result?.serverInfo).toMatchObject({
+        name: "dify-helm-watchdog",
+      });
+    });
+
+    it("falls back to the newest legacy version for an unsupported client version", async () => {
       const response = await postJson({
         jsonrpc: "2.0",
         id: 1,
@@ -81,27 +102,88 @@ describe("POST /api/v1/mcp — MCP Streamable HTTP", () => {
       });
 
       const payload = (await response.json()) as JsonRpcResult;
-      expect(payload.result?.protocolVersion).toBe(DEFAULT_PROTOCOL_VERSION);
+      expect(payload.result?.protocolVersion).toBe(LEGACY_PROTOCOL_VERSION);
+    });
+
+    it("never answers initialize with a 2026-era version", async () => {
+      const response = await postJson({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: MODERN_PROTOCOL_VERSION, capabilities: {} },
+      });
+
+      const payload = (await response.json()) as JsonRpcResult;
+      expect(payload.result?.protocolVersion).toBe(LEGACY_PROTOCOL_VERSION);
+    });
+
+    it("reads the protocol version from the _meta envelope", async () => {
+      const response = await postJson({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          _meta: { "io.modelcontextprotocol/protocolVersion": "2025-03-26" },
+        },
+      });
+
+      const payload = (await response.json()) as JsonRpcResult;
+      expect(payload.result?.protocolVersion).toBe("2025-03-26");
     });
   });
 
-  it("handles server/discover without a prior initialize", async () => {
+  it("answers server/discover with a 2026-07-28 DiscoverResult", async () => {
     const response = await postJson({
       jsonrpc: "2.0",
       id: 42,
       method: "server/discover",
+      params: {
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+          "io.modelcontextprotocol/clientInfo": {
+            name: "claude-code",
+            version: "2.1.278",
+          },
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      },
     });
 
     expect(response.status).toBe(200);
     const payload = (await response.json()) as JsonRpcResult;
+    expect(payload.id).toBe(42);
     const result = payload.result as {
+      resultType?: string;
+      supportedVersions?: string[];
+      capabilities?: { tools?: unknown; prompts?: unknown };
+      ttlMs?: number;
+      cacheScope?: string;
       protocolVersion?: string;
-      capabilities?: { tools?: unknown };
-      serverInfo?: { name?: string };
+      _meta?: Record<string, { name?: string; version?: string }>;
     };
-    expect(result.protocolVersion).toBe(DEFAULT_PROTOCOL_VERSION);
+    expect(result.resultType).toBe("complete");
+    expect(result.supportedVersions).toContain(MODERN_PROTOCOL_VERSION);
+    expect(result.supportedVersions).toContain(LEGACY_PROTOCOL_VERSION);
     expect(result.capabilities?.tools).toBeDefined();
-    expect(result.serverInfo?.name).toBe("dify-helm-watchdog");
+    expect(result.capabilities?.prompts).toBeDefined();
+    expect(result.cacheScope).toBe("public");
+    expect(typeof result.ttlMs).toBe("number");
+    expect(result._meta?.["io.modelcontextprotocol/serverInfo"]).toMatchObject({
+      name: "dify-helm-watchdog",
+    });
+    // DiscoverResult has no protocolVersion; the client picks from the list.
+    expect(result.protocolVersion).toBeUndefined();
+  });
+
+  it("marks every result as resultType complete for 2026-07-28 clients", async () => {
+    for (const method of ["ping", "tools/list", "prompts/list"]) {
+      const response = await postJson({ jsonrpc: "2.0", id: 7, method });
+      const payload = (await response.json()) as JsonRpcResult;
+      expect(payload.result?.resultType).toBe("complete");
+      expect(payload.result?._meta).toMatchObject({
+        "io.modelcontextprotocol/serverInfo": { name: "dify-helm-watchdog" },
+      });
+    }
   });
 
   describe("list results carry cache metadata", () => {
@@ -196,12 +278,12 @@ describe("POST /api/v1/mcp — MCP Streamable HTTP", () => {
     );
   });
 
-  it("responds to ping with an empty result object", async () => {
+  it("responds to ping with a complete result", async () => {
     const response = await postJson({ jsonrpc: "2.0", id: 6, method: "ping" });
 
     expect(response.status).toBe(200);
     const payload = (await response.json()) as JsonRpcResult;
-    expect(payload.result).toEqual({});
+    expect(payload.result).toMatchObject({ resultType: "complete" });
   });
 
   it("returns 204 for a notification (no id)", async () => {

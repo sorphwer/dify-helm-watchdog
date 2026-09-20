@@ -10,16 +10,21 @@ import { listPrompts, getPrompt } from "./prompts";
 import { trackEvent } from "@/lib/analytics/track";
 import {
   JSON_RPC_ERRORS,
+  MCP_LEGACY_PROTOCOL_VERSION,
+  MCP_LEGACY_PROTOCOL_VERSIONS,
   MCP_LIST_CACHE_TTL_MS,
-  MCP_PROTOCOL_VERSION,
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
   MCP_SUPPORTED_PROTOCOL_VERSIONS,
   type JsonRpcRequest,
   type JsonRpcResponse,
+  type McpCapabilities,
+  type McpDiscoverResult,
   type McpInitializeParams,
   type McpInitializeResult,
   type McpListToolsResult,
+  type McpResultMeta,
+  type McpServerInfo,
   type McpToolCallParams,
 } from "./types";
 
@@ -43,14 +48,34 @@ const isValidRequest = (message: unknown): message is JsonRpcRequest => {
   );
 };
 
-// Create a JSON-RPC response
+const SERVER_INFO: McpServerInfo = {
+  name: MCP_SERVER_NAME,
+  version: MCP_SERVER_VERSION,
+};
+
+const SERVER_CAPABILITIES: McpCapabilities = {
+  tools: {},
+  prompts: {},
+};
+
+const RESULT_META: McpResultMeta = {
+  "io.modelcontextprotocol/serverInfo": SERVER_INFO,
+};
+
+// Create a JSON-RPC response.
+// Every result carries `resultType: "complete"` and the serverInfo `_meta`
+// required by 2026-07-28 clients; pre-2026 clients ignore the extra fields.
 const createResponse = (
   id: string | number | undefined,
-  result: unknown,
+  result: object,
 ): JsonRpcResponse => ({
   jsonrpc: "2.0",
   id,
-  result,
+  result: {
+    resultType: "complete",
+    _meta: RESULT_META,
+    ...result,
+  },
 });
 
 // Create a JSON-RPC error response
@@ -69,42 +94,53 @@ const createErrorResponse = (
   },
 });
 
-// Negotiate the protocol version: echo a supported client-requested version,
-// otherwise fall back to the newest supported version.
-const negotiateProtocolVersion = (requested?: string): string =>
+// The requested protocol version lives at `params.protocolVersion` in the
+// legacy handshake and inside the `_meta` envelope for 2026-07-28 clients.
+const requestedProtocolVersion = (
+  params?: Partial<McpInitializeParams>,
+): string | undefined =>
+  params?.protocolVersion ??
+  params?._meta?.["io.modelcontextprotocol/protocolVersion"];
+
+// Legacy `initialize` negotiation: echo a supported pre-2026 version,
+// otherwise answer with the newest legacy version. Never return a 2026-era
+// version here — legacy clients treat that as an unsupported server.
+const negotiateLegacyProtocolVersion = (requested?: string): string =>
   requested &&
-  (MCP_SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(requested)
+  (MCP_LEGACY_PROTOCOL_VERSIONS as readonly string[]).includes(requested)
     ? requested
-    : MCP_PROTOCOL_VERSION;
+    : MCP_LEGACY_PROTOCOL_VERSION;
 
-// Shared server description for initialize and server/discover
-const buildServerDescription = (
-  requestedVersion?: string,
-): McpInitializeResult => ({
-  protocolVersion: negotiateProtocolVersion(requestedVersion),
-  capabilities: {
-    tools: {},
-    prompts: {},
-  },
-  serverInfo: {
-    name: MCP_SERVER_NAME,
-    version: MCP_SERVER_VERSION,
-  },
-});
-
-// Handle initialize request (version negotiation per 2026-07-28 spec)
+// Handle initialize request (legacy handshake, 2025-11-25 and earlier)
 const handleInitialize = (
   id: string | number | undefined,
   params?: Partial<McpInitializeParams>,
-): JsonRpcResponse =>
-  createResponse(id, buildServerDescription(params?.protocolVersion));
+): JsonRpcResponse => {
+  const result: McpInitializeResult = {
+    protocolVersion: negotiateLegacyProtocolVersion(
+      requestedProtocolVersion(params),
+    ),
+    capabilities: SERVER_CAPABILITIES,
+    serverInfo: SERVER_INFO,
+  };
+  return createResponse(id, result);
+};
 
-// Handle server/discover request — callable without prior initialize
+// Handle server/discover request (2026-07-28 DiscoverResult). Stateless:
+// the client picks the newest version both sides support from the list.
 const handleServerDiscover = (
   id: string | number | undefined,
-  params?: Partial<McpInitializeParams>,
-): JsonRpcResponse =>
-  createResponse(id, buildServerDescription(params?.protocolVersion));
+): JsonRpcResponse => {
+  const result: McpDiscoverResult = {
+    resultType: "complete",
+    supportedVersions: [...MCP_SUPPORTED_PROTOCOL_VERSIONS],
+    capabilities: SERVER_CAPABILITIES,
+    ttlMs: MCP_LIST_CACHE_TTL_MS,
+    cacheScope: "public",
+    _meta: RESULT_META,
+  };
+  return createResponse(id, result);
+};
 
 // Handle ping request
 const handlePing = (id: string | number | undefined): JsonRpcResponse => {
@@ -260,10 +296,7 @@ export const handleMessage = async (
       );
 
     case "server/discover":
-      return handleServerDiscover(
-        id,
-        (params ?? {}) as unknown as Partial<McpInitializeParams>,
-      );
+      return handleServerDiscover(id);
 
     case "ping":
       return handlePing(id);
