@@ -221,8 +221,8 @@ export default function UpgradePathModal({ open }: UpgradePathModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
-      <DialogContent className="max-h-[min(90vh,800px)] gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="border-b border-border px-6 py-5 pr-12 text-left">
+      <DialogContent className="flex max-h-[min(90vh,800px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="shrink-0 border-b border-border px-6 py-5 pr-12 text-left">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <MapPinned className="h-5 w-5 text-primary" />
             Upgrade plan
