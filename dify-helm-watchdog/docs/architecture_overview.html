@@ -188,7 +188,7 @@
 
   <header class="top">
     <div>
-      <h1>dify-helm-watchdog · 系统架构总览<span class="sub">Next.js 15 · React 19 · Vercel Blob · MCP · Cloudflare Analytics Engine · 每日快照 Dify Helm Chart</span></h1>
+      <h1>dify-helm-watchdog · 系统架构总览<span class="sub">Next.js 15 · React 19 · Cloudflare R2 · MCP · Cloudflare Analytics Engine · 每日快照 Dify Helm Chart</span></h1>
     </div>
     <div class="legend">
       <div class="legend-group">
@@ -280,12 +280,12 @@
       <div class="card orch" id="card-storage-factory">
         <div class="status"></div>
         <div class="title">Storage Factory</div>
-        <div class="desc"><code>services/storage.ts</code> · 根据 <code>ENABLE_LOCAL_MODE</code> 选择 Blob 或 Local 实现（<code>read/readContent/write/ensureAccess</code>）</div>
+        <div class="desc"><code>services/storage.ts</code> · 根据 <code>ENABLE_LOCAL_MODE</code> 选择 R2 或 Local 实现（<code>read/readContent/write/ensureAccess</code>）</div>
       </div>
       <div class="arrow fan">⇉</div>
       <div class="card core" id="card-blob">
         <div class="status"></div>
-        <div class="title">Vercel Blob</div>
+        <div class="title">Cloudflare R2</div>
         <div class="desc">前缀 <code>helm-watchdog/</code> ·
           <code>cache.json</code> ·
           <code>values/{v}.yaml</code> ·
@@ -463,7 +463,7 @@
   <div class="footer-note">
     <div><b>部署：</b> Vercel · Node.js runtime · Next.js 15.5.7 (Turbopack) · React 19.1.0 · Cloudflare Worker / Analytics Engine</div>
     <div><b>CI/CD：</b> Vercel auto deploy · daily cron <code>0 2 * * *</code> · Cloudflare Worker 通过 <code>wrangler deploy</code> 单独发布</div>
-    <div><b>环境变量：</b> <code>BLOB_READ_WRITE_TOKEN</code> + 可选 <code>CRON_API_KEY</code> / <code>DIFY_API_KEY</code> / <code>ANALYTICS_WORKER_URL</code> / <code>ANALYTICS_WORKER_SECRET</code> / <code>ANALYTICS_SESSION_SALT</code></div>
+    <div><b>环境变量：</b> <code>R2_ACCOUNT_ID</code> / <code>R2_ACCESS_KEY_ID</code> / <code>R2_SECRET_ACCESS_KEY</code> / <code>R2_BUCKET</code> / <code>R2_PUBLIC_BASE_URL</code> + 可选 <code>CRON_API_KEY</code> / <code>DIFY_API_KEY</code> / <code>ANALYTICS_WORKER_URL</code> / <code>ANALYTICS_WORKER_SECRET</code> / <code>ANALYTICS_SESSION_SALT</code></div>
     <div><b>测试：</b> Jest · API route、MCP、analytics、middleware、values wizard 等测试位于 <code>src/test/</code></div>
     <div><b>术语：</b> <code>chart</code>（Helm 包）· <code>values.yaml</code>（部署配置）· <code>image variant</code>（ORIGINAL/AMD64/ARM64）· <code>Analytics Engine</code>（Cloudflare 事件聚合）· <code>EE</code>（Enterprise）</div>
   </div>
